@@ -468,9 +468,9 @@ def get_aircall_users():
 
 @app.route('/api/calls', methods=['POST'])
 def get_calls():
-    """Get recent calls for an Aircall user."""
-    user_id = request.json.get('user_id', '')
-    result = call_mcp_tool('list_aircall_calls', {'user_id': str(user_id)})
+    """Get recent calls for an Aircall user by email."""
+    user_email = request.json.get('user_email', '')
+    result = call_mcp_tool('list_aircall_calls', {'user_email': user_email})
     return jsonify(result)
 
 

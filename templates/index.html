@@ -769,32 +769,19 @@
         document.querySelectorAll('.employee-item').forEach(el => el.classList.remove('selected'));
         event.currentTarget.classList.add('selected');
 
-        // Move to step 2 and load calls
+        // Move to step 2 and load calls directly by email
         goToStep(2);
         document.getElementById('calls-title').textContent = `Recent Calls — ${emp.name}`;
         document.getElementById('calls-subtitle').textContent = 'Loading calls...';
         document.getElementById('call-list').innerHTML = '';
 
-        // First get Aircall users to find this employee
+        if (!emp.email) {
+            document.getElementById('calls-subtitle').textContent = 'No email found for this employee — cannot look up Aircall calls.';
+            return;
+        }
+
         try {
-            const usersRes = await fetch('/api/aircall-users');
-            const usersData = await usersRes.json();
-            let users = parseAircallUsers(usersData);
-
-            // Match by name
-            const empNameLower = emp.name.toLowerCase();
-            const matched = users.find(u => {
-                const uName = (u.name || `${u.first_name || ''} ${u.last_name || ''}`).toLowerCase().trim();
-                return uName.includes(empNameLower) || empNameLower.includes(uName) ||
-                       empNameLower.split(' ').some(part => uName.includes(part) && part.length > 2);
-            });
-
-            if (matched) {
-                state.aircallUserId = matched.id;
-                await loadCalls(matched.id);
-            } else {
-                document.getElementById('calls-subtitle').textContent = 'Could not find this employee in Aircall. They may not have an Aircall account.';
-            }
+            await loadCalls(emp.email);
         } catch (err) {
             document.getElementById('calls-subtitle').textContent = 'Failed to load calls: ' + err.message;
         }
@@ -818,12 +805,12 @@
         return [];
     }
 
-    async function loadCalls(userId) {
+    async function loadCalls(userEmail) {
         try {
             const res = await fetch('/api/calls', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId })
+                body: JSON.stringify({ user_email: userEmail })
             });
             const data = await res.json();
             renderCallList(data);
@@ -837,20 +824,9 @@
         list.innerHTML = '';
 
         let calls = [];
-        if (Array.isArray(data)) calls = data;
+        if (data.result && data.result.calls) calls = data.result.calls;
+        else if (Array.isArray(data)) calls = data;
         else if (data.calls) calls = data.calls;
-        else if (data.raw) { try { const p = JSON.parse(data.raw); calls = p.calls || p || []; } catch(e) {} }
-        else if (data.content) {
-            try {
-                const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
-                if (Array.isArray(parsed)) calls = parsed;
-                else if (parsed.calls) calls = parsed.calls;
-                else if (Array.isArray(parsed.content)) {
-                    const t = parsed.content.find(c => c.type === 'text');
-                    if (t) { const p2 = JSON.parse(t.text); calls = p2.calls || p2 || []; }
-                }
-            } catch(e) {}
-        }
 
         if (!calls.length) {
             document.getElementById('calls-subtitle').textContent = 'No recent calls found for this rep.';
