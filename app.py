@@ -9,7 +9,7 @@ import json
 import subprocess
 import time
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, render_template, jsonify, request, Response
@@ -468,9 +468,14 @@ def get_aircall_users():
 
 @app.route('/api/calls', methods=['POST'])
 def get_calls():
-    """Get recent calls for an Aircall user by email."""
+    """Get recent calls for an Aircall user by email. Pulls 90 days of history."""
     user_email = request.json.get('user_email', '')
-    result = call_mcp_tool('list_aircall_calls', {'user_email': user_email})
+    date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    result = call_mcp_tool('list_aircall_calls', {
+        'user_email': user_email,
+        'limit': 100,
+        'date_from': date_from,
+    })
     return jsonify(result)
 
 
