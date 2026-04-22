@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Quality Review — Trilogy Care</title>
+    <style>
+        :root {
+            --navy: #2C4C79;
+            --navy-light: #3A6098;
+            --navy-dark: #1E3550;
+            --teal: #43C0BE;
+            --teal-light: #5ED4D2;
+            --dark-teal: #007F7E;
+            --sky-blue: #64BCEA;
+            --red: #E04B51;
+            --orange: #E0763C;
+            --yellow: #FEBD33;
+            --white: #FFFFFF;
+            --gray-50: #F8FAFB;
+            --gray-100: #F0F3F5;
+            --gray-200: #E2E7EB;
+            --gray-300: #CBD2D9;
+            --gray-500: #7B8794;
+            --gray-700: #3E4C59;
+            --gray-900: #1F2933;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Aptos', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+            color: var(--white);
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 12px rgba(44, 76, 121, 0.25);
+        }
+        .header-inner {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+        .header h1 span {
+            color: var(--teal);
+            font-weight: 700;
+        }
+        .header-badge {
+            background: rgba(67, 192, 190, 0.15);
+            border: 1px solid rgba(67, 192, 190, 0.3);
+            color: var(--teal-light);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* Main */
+        .main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+
+        /* Steps indicator */
+        .steps {
+            display: flex;
+            gap: 0;
+            margin-bottom: 32px;
+            background: var(--white);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200);
+        }
+        .step {
+            flex: 1;
+            padding: 14px 16px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-500);
+            background: var(--white);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        .step.active {
+            color: var(--navy);
+            background: rgba(67, 192, 190, 0.08);
+            font-weight: 600;
+        }
+        .step.completed {
+            color: var(--dark-teal);
+            background: rgba(67, 192, 190, 0.05);
+        }
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--gray-200);
+            color: var(--gray-500);
+            font-size: 12px;
+            font-weight: 700;
+            margin-right: 8px;
+            transition: all 0.3s ease;
+        }
+        .step.active .step-num {
+            background: var(--teal);
+            color: var(--white);
+        }
+        .step.completed .step-num {
+            background: var(--dark-teal);
+            color: var(--white);
+        }
+        .step.completed .step-num::after {
+            content: '\2713';
+        }
+        .step.completed .step-num span { display: none; }
+
+        /* Cards */
+        .card {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200);
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 16px;
+        }
+
+        /* Search input */
+        .search-group {
+            display: flex;
+            gap: 12px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .search-input:focus {
+            border-color: var(--teal);
+        }
+        .search-input::placeholder {
+            color: var(--gray-300);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: var(--navy);
+            color: var(--white);
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: var(--navy-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(44, 76, 121, 0.3);
+        }
+        .btn-teal {
+            background: var(--teal);
+            color: var(--white);
+        }
+        .btn-teal:hover:not(:disabled) {
+            background: var(--teal-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(67, 192, 190, 0.3);
+        }
+        .btn-outline {
+            background: transparent;
+            color: var(--navy);
+            border: 2px solid var(--gray-200);
+        }
+        .btn-outline:hover:not(:disabled) {
+            border-color: var(--navy);
+            background: var(--gray-50);
+        }
+        .btn-danger {
+            background: var(--red);
+            color: var(--white);
+        }
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+
+        /* Employee results */
+        .employee-list {
+            list-style: none;
+            margin-top: 16px;
+        }
+        .employee-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .employee-item:hover {
+            border-color: var(--teal);
+            background: rgba(67, 192, 190, 0.04);
+            transform: translateX(2px);
+        }
+        .employee-item.selected {
+            border-color: var(--teal);
+            background: rgba(67, 192, 190, 0.08);
+            box-shadow: 0 0 0 1px var(--teal);
+        }
+        .emp-info { flex: 1; }
+        .emp-name {
+            font-weight: 600;
+            color: var(--navy);
+            font-size: 15px;
+        }
+        .emp-meta {
+            font-size: 13px;
+            color: var(--gray-500);
+            margin-top: 2px;
+        }
+        .emp-arrow {
+            color: var(--teal);
+            font-size: 18px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .employee-item:hover .emp-arrow { opacity: 1; }
+
+        /* Call list */
+        .call-list { list-style: none; margin-top: 16px; }
+        .call-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 16px;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .call-item:hover {
+            border-color: var(--teal);
+            background: rgba(67, 192, 190, 0.04);
+        }
+        .call-item.selected {
+            border-color: var(--teal);
+            background: rgba(67, 192, 190, 0.08);
+            box-shadow: 0 0 0 1px var(--teal);
+        }
+        .call-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            margin-right: 14px;
+            flex-shrink: 0;
+        }
+        .call-icon.inbound { background: rgba(67, 192, 190, 0.12); color: var(--dark-teal); }
+        .call-icon.outbound { background: rgba(100, 188, 234, 0.12); color: var(--navy); }
+        .call-info { flex: 1; }
+        .call-date { font-weight: 600; font-size: 14px; color: var(--navy); }
+        .call-meta { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
+        .call-duration {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-700);
+            padding: 4px 10px;
+            background: var(--gray-100);
+            border-radius: 6px;
+        }
+
+        /* Progress / Status */
+        .status-bar {
+            display: none;
+            margin-top: 20px;
+        }
+        .status-bar.visible { display: block; }
+        .status-message {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            background: rgba(67, 192, 190, 0.06);
+            border: 1px solid rgba(67, 192, 190, 0.2);
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--navy);
+        }
+        .status-message.error {
+            background: rgba(224, 75, 81, 0.06);
+            border-color: rgba(224, 75, 81, 0.2);
+            color: var(--red);
+        }
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--gray-200);
+            border-top-color: var(--teal);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Review result */
+        .review-result { display: none; }
+        .review-result.visible { display: block; }
+
+        .grade-card {
+            text-align: center;
+            padding: 32px;
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+            border-radius: 12px;
+            color: var(--white);
+            margin-bottom: 20px;
+        }
+        .grade-label {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            opacity: 0.7;
+            margin-bottom: 8px;
+        }
+        .grade-value {
+            font-size: 64px;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--teal);
+        }
+        .grade-detail {
+            font-size: 18px;
+            margin-top: 8px;
+            opacity: 0.8;
+        }
+
+        .scores-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .score-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            border: 1px solid var(--gray-200);
+        }
+        .score-label { font-size: 13px; color: var(--gray-700); font-weight: 500; }
+        .score-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--navy);
+            padding: 2px 10px;
+            border-radius: 6px;
+        }
+        .score-high { background: rgba(67, 192, 190, 0.15); color: var(--dark-teal); }
+        .score-mid { background: rgba(254, 189, 51, 0.15); color: var(--orange); }
+        .score-low { background: rgba(224, 75, 81, 0.15); color: var(--red); }
+
+        /* Email preview */
+        .email-preview {
+            display: none;
+            margin-top: 20px;
+        }
+        .email-preview.visible { display: block; }
+        .email-field {
+            display: flex;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 14px;
+        }
+        .email-field-label {
+            width: 100px;
+            font-weight: 600;
+            color: var(--navy);
+            flex-shrink: 0;
+        }
+        .email-field-value { color: var(--gray-700); }
+        .email-body {
+            margin-top: 12px;
+            padding: 16px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--gray-700);
+            white-space: pre-line;
+            border: 1px solid var(--gray-200);
+        }
+        .email-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        /* Sent confirmation */
+        .sent-confirmation {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        .sent-confirmation.visible { display: block; }
+        .sent-icon {
+            width: 64px;
+            height: 64px;
+            background: rgba(67, 192, 190, 0.12);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+        .sent-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 8px;
+        }
+        .sent-detail {
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        /* Utility */
+        .hidden { display: none !important; }
+        .mt-12 { margin-top: 12px; }
+        .mt-20 { margin-top: 20px; }
+        .text-muted { color: var(--gray-500); font-size: 13px; }
+        .text-center { text-align: center; }
+
+        /* Section panels */
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.3s ease forwards; }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .main { padding: 16px; }
+            .header-inner { padding: 16px; }
+            .scores-grid { grid-template-columns: 1fr; }
+            .search-group { flex-direction: column; }
+            .steps { flex-wrap: wrap; }
+            .step { font-size: 12px; padding: 10px 8px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-inner">
+        <h1><span>Trilogy</span> Care &mdash; Call Quality Review</h1>
+        <div class="header-badge">AI-Powered</div>
+    </div>
+</div>
+
+<div class="main">
+    <!-- Steps -->
+    <div class="steps">
+        <div class="step active" id="step-1">
+            <span class="step-num"><span>1</span></span>Find Rep
+        </div>
+        <div class="step" id="step-2">
+            <span class="step-num"><span>2</span></span>Select Call
+        </div>
+        <div class="step" id="step-3">
+            <span class="step-num"><span>3</span></span>Review
+        </div>
+        <div class="step" id="step-4">
+            <span class="step-num"><span>4</span></span>Send
+        </div>
+    </div>
+
+    <!-- Panel 1: Search -->
+    <div class="panel active" id="panel-1">
+        <div class="card">
+            <div class="card-title">Search for a sales representative</div>
+            <div class="search-group">
+                <input type="text" class="search-input" id="search-input"
+                       placeholder="Enter rep name (e.g. Sarah, Anthony, James...)"
+                       autocomplete="off">
+                <button class="btn btn-primary" id="search-btn" onclick="searchEmployee()">
+                    Search
+                </button>
+            </div>
+            <ul class="employee-list" id="employee-list"></ul>
+        </div>
+    </div>
+
+    <!-- Panel 2: Calls -->
+    <div class="panel" id="panel-2">
+        <div class="card">
+            <div class="card-title" id="calls-title">Recent Calls</div>
+            <p class="text-muted" id="calls-subtitle">Select the call to review</p>
+            <ul class="call-list" id="call-list"></ul>
+            <div class="mt-12">
+                <button class="btn btn-outline btn-sm" onclick="goToStep(1)">Back to search</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 3: Review -->
+    <div class="panel" id="panel-3">
+        <div class="card">
+            <div class="card-title">Generating Review</div>
+
+            <div class="status-bar visible" id="status-bar">
+                <div class="status-message" id="status-message">
+                    <div class="spinner" id="status-spinner"></div>
+                    <span id="status-text">Preparing...</span>
+                </div>
+            </div>
+
+            <div class="review-result" id="review-result">
+                <!-- Grade card -->
+                <div class="grade-card" id="grade-card">
+                    <div class="grade-label">Overall Grade</div>
+                    <div class="grade-value" id="grade-value">--</div>
+                    <div class="grade-detail" id="grade-detail"></div>
+                </div>
+
+                <!-- Scores -->
+                <div class="card-title mt-20">Score Breakdown</div>
+                <div class="scores-grid" id="scores-grid"></div>
+
+                <!-- Highlights -->
+                <div class="card-title mt-20">Highlights</div>
+                <ul id="highlights-list" style="padding-left: 20px; margin-top: 8px;"></ul>
+
+                <!-- Top strength & development -->
+                <div class="card-title mt-20">Top Strength</div>
+                <p id="top-strength" style="margin-top: 4px; color: var(--gray-700);"></p>
+
+                <div class="card-title mt-20">Top Development Area</div>
+                <p id="top-dev" style="margin-top: 4px; color: var(--gray-700);"></p>
+
+                <div class="mt-20" style="display: flex; gap: 12px;">
+                    <button class="btn btn-teal" onclick="showEmailPreview()">Send to Rep</button>
+                    <a class="btn btn-outline" id="download-link" href="#" download>Download .docx</a>
+                    <button class="btn btn-outline" onclick="goToStep(1)">New Review</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel 4: Email -->
+    <div class="panel" id="panel-4">
+        <div class="card">
+            <div class="card-title">Email Preview</div>
+            <p class="text-muted">Review before sending</p>
+
+            <div class="email-preview visible" id="email-preview-content">
+                <div class="email-field">
+                    <div class="email-field-label">From</div>
+                    <div class="email-field-value">anesut@trilogycare.com.au</div>
+                </div>
+                <div class="email-field">
+                    <div class="email-field-label">To</div>
+                    <div class="email-field-value" id="email-to"></div>
+                </div>
+                <div class="email-field">
+                    <div class="email-field-label">Subject</div>
+                    <div class="email-field-value" id="email-subject"></div>
+                </div>
+                <div class="email-field">
+                    <div class="email-field-label">Attachment</div>
+                    <div class="email-field-value" id="email-attachment"></div>
+                </div>
+                <div class="email-body" id="email-body"></div>
+
+                <div class="email-actions">
+                    <button class="btn btn-teal" id="send-btn" onclick="sendEmail()">
+                        Confirm &amp; Send
+                    </button>
+                    <button class="btn btn-outline" onclick="goToStep(3)">Back to Review</button>
+                </div>
+            </div>
+
+            <div class="sent-confirmation" id="sent-confirmation">
+                <div class="sent-icon">&#10003;</div>
+                <div class="sent-title">Email Sent</div>
+                <div class="sent-detail" id="sent-detail"></div>
+                <div class="mt-20">
+                    <button class="btn btn-primary" onclick="goToStep(1)">Start New Review</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---- State ----
+    let state = {
+        employee: null,
+        aircallUserId: null,
+        selectedCall: null,
+        reviewData: null,
+    };
+
+    // ---- Step navigation ----
+    function goToStep(n) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.step').forEach((s, i) => {
+            s.classList.remove('active', 'completed');
+            if (i + 1 < n) s.classList.add('completed');
+            if (i + 1 === n) s.classList.add('active');
+        });
+        document.getElementById(`panel-${n}`).classList.add('active');
+
+        // Reset review state when going back to step 1
+        if (n === 1) {
+            state = { employee: null, aircallUserId: null, selectedCall: null, reviewData: null };
+            document.getElementById('review-result').classList.remove('visible');
+            document.getElementById('sent-confirmation').classList.remove('visible');
+            document.getElementById('email-preview-content').classList.add('visible');
+            document.getElementById('search-input').value = '';
+            document.getElementById('employee-list').innerHTML = '';
+        }
+    }
+
+    // ---- Search ----
+    document.getElementById('search-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') searchEmployee();
+    });
+
+    async function searchEmployee() {
+        const name = document.getElementById('search-input').value.trim();
+        if (!name) return;
+
+        const btn = document.getElementById('search-btn');
+        btn.disabled = true;
+        btn.textContent = 'Searching...';
+
+        try {
+            const res = await fetch('/api/search-employee', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const data = await res.json();
+            renderEmployeeList(data);
+        } catch (err) {
+            alert('Search failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Search';
+        }
+    }
+
+    function renderEmployeeList(data) {
+        const list = document.getElementById('employee-list');
+        list.innerHTML = '';
+
+        // Parse employees from MCP response format: {result: {employees: [...]}}
+        let employees = [];
+        if (Array.isArray(data)) {
+            employees = data;
+        } else if (data.result && data.result.employees) {
+            employees = data.result.employees;
+        } else if (data.result && Array.isArray(data.result)) {
+            employees = data.result;
+        } else if (data.employees) {
+            employees = data.employees;
+        } else if (data.results) {
+            employees = data.results;
+        } else if (data.raw) {
+            try { employees = JSON.parse(data.raw); } catch(e) {}
+            if (!Array.isArray(employees)) {
+                list.innerHTML = '<li class="text-muted mt-12">Could not parse employee data.</li>';
+                return;
+            }
+        }
+
+        if (!employees.length) {
+            list.innerHTML = '<li class="text-muted mt-12">No employees found. Try a different name.</li>';
+            return;
+        }
+
+        employees.forEach(emp => {
+            const name = emp.full_name || emp.name || emp.display_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
+            // title field from MCP is "EST-310 Sales Representative" — split it
+            const titleRaw = emp.title || '';
+            const estMatch = titleRaw.match(/(EST-\d+)\s*(.*)/);
+            const estId = emp.employee_id || emp.est_id || (estMatch ? estMatch[1] : '') || emp.id || '';
+            const role = emp.role || emp.job_title || (estMatch ? estMatch[2] : titleRaw) || emp.position || '';
+            const dept = emp.department || emp.team || '';
+            const email = emp.email || emp.work_email || '';
+
+            const li = document.createElement('li');
+            li.className = 'employee-item fade-in';
+            li.innerHTML = `
+                <div class="emp-info">
+                    <div class="emp-name">${escHtml(name)}</div>
+                    <div class="emp-meta">${escHtml(role)}${dept ? ' · ' + escHtml(dept) : ''}${estId ? ' · ' + escHtml(estId) : ''}</div>
+                    <div class="emp-meta">${escHtml(email)}</div>
+                </div>
+                <div class="emp-arrow">&#8594;</div>
+            `;
+            li.addEventListener('click', () => selectEmployee({
+                name, role, department: dept, email, est_id: estId, raw: emp
+            }));
+            list.appendChild(li);
+        });
+    }
+
+    async function selectEmployee(emp) {
+        state.employee = emp;
+
+        // Highlight selected
+        document.querySelectorAll('.employee-item').forEach(el => el.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+
+        // Move to step 2 and load calls
+        goToStep(2);
+        document.getElementById('calls-title').textContent = `Recent Calls — ${emp.name}`;
+        document.getElementById('calls-subtitle').textContent = 'Loading calls...';
+        document.getElementById('call-list').innerHTML = '';
+
+        // First get Aircall users to find this employee
+        try {
+            const usersRes = await fetch('/api/aircall-users');
+            const usersData = await usersRes.json();
+            let users = parseAircallUsers(usersData);
+
+            // Match by name
+            const empNameLower = emp.name.toLowerCase();
+            const matched = users.find(u => {
+                const uName = (u.name || `${u.first_name || ''} ${u.last_name || ''}`).toLowerCase().trim();
+                return uName.includes(empNameLower) || empNameLower.includes(uName) ||
+                       empNameLower.split(' ').some(part => uName.includes(part) && part.length > 2);
+            });
+
+            if (matched) {
+                state.aircallUserId = matched.id;
+                await loadCalls(matched.id);
+            } else {
+                document.getElementById('calls-subtitle').textContent = 'Could not find this employee in Aircall. They may not have an Aircall account.';
+            }
+        } catch (err) {
+            document.getElementById('calls-subtitle').textContent = 'Failed to load calls: ' + err.message;
+        }
+    }
+
+    function parseAircallUsers(data) {
+        if (Array.isArray(data)) return data;
+        if (data.users) return data.users;
+        if (data.raw) { try { const p = JSON.parse(data.raw); return p.users || p || []; } catch(e) {} }
+        if (data.content) {
+            try {
+                const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+                if (Array.isArray(parsed)) return parsed;
+                if (parsed.users) return parsed.users;
+                if (Array.isArray(parsed.content)) {
+                    const t = parsed.content.find(c => c.type === 'text');
+                    if (t) { const p2 = JSON.parse(t.text); return p2.users || p2 || []; }
+                }
+            } catch(e) {}
+        }
+        return [];
+    }
+
+    async function loadCalls(userId) {
+        try {
+            const res = await fetch('/api/calls', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            });
+            const data = await res.json();
+            renderCallList(data);
+        } catch(err) {
+            document.getElementById('calls-subtitle').textContent = 'Failed to load calls.';
+        }
+    }
+
+    function renderCallList(data) {
+        const list = document.getElementById('call-list');
+        list.innerHTML = '';
+
+        let calls = [];
+        if (Array.isArray(data)) calls = data;
+        else if (data.calls) calls = data.calls;
+        else if (data.raw) { try { const p = JSON.parse(data.raw); calls = p.calls || p || []; } catch(e) {} }
+        else if (data.content) {
+            try {
+                const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+                if (Array.isArray(parsed)) calls = parsed;
+                else if (parsed.calls) calls = parsed.calls;
+                else if (Array.isArray(parsed.content)) {
+                    const t = parsed.content.find(c => c.type === 'text');
+                    if (t) { const p2 = JSON.parse(t.text); calls = p2.calls || p2 || []; }
+                }
+            } catch(e) {}
+        }
+
+        if (!calls.length) {
+            document.getElementById('calls-subtitle').textContent = 'No recent calls found for this rep.';
+            return;
+        }
+
+        document.getElementById('calls-subtitle').textContent = `${calls.length} recent calls — select one to review`;
+
+        calls.slice(0, 15).forEach(call => {
+            const direction = call.direction || 'unknown';
+            const duration = call.duration ? Math.round(call.duration / 60) : 0;
+            const startedAt = call.started_at ? new Date(call.started_at * 1000).toLocaleString('en-AU', {
+                day: 'numeric', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: true
+            }) : 'Unknown date';
+            const phone = call.raw_digits || call.number?.digits || '';
+            const contactName = call.contact?.display_name || call.contact?.first_name || '';
+
+            const li = document.createElement('li');
+            li.className = 'call-item fade-in';
+            li.innerHTML = `
+                <div class="call-icon ${direction}">
+                    ${direction === 'inbound' ? '&#8615;' : '&#8613;'}
+                </div>
+                <div class="call-info">
+                    <div class="call-date">${escHtml(startedAt)}</div>
+                    <div class="call-meta">
+                        ${escHtml(direction)} · ${escHtml(contactName || phone || 'Unknown')}
+                    </div>
+                </div>
+                <div class="call-duration">${duration} min</div>
+            `;
+            li.addEventListener('click', () => selectCall({
+                id: call.id,
+                direction,
+                duration,
+                date: startedAt,
+                phone,
+                contact_name: contactName,
+                raw: call,
+            }));
+            list.appendChild(li);
+        });
+    }
+
+    function selectCall(call) {
+        state.selectedCall = call;
+        document.querySelectorAll('.call-item').forEach(el => el.classList.remove('selected'));
+        event.currentTarget.classList.add('selected');
+        generateReview(call);
+    }
+
+    // ---- Generate Review ----
+    function generateReview(call) {
+        goToStep(3);
+        const statusBar = document.getElementById('status-bar');
+        const statusText = document.getElementById('status-text');
+        const statusSpinner = document.getElementById('status-spinner');
+        const statusMsg = document.getElementById('status-message');
+        const reviewResult = document.getElementById('review-result');
+
+        statusBar.classList.add('visible');
+        statusMsg.classList.remove('error');
+        statusSpinner.style.display = 'block';
+        reviewResult.classList.remove('visible');
+        statusText.textContent = 'Starting review...';
+
+        const body = {
+            call_id: call.id,
+            rep_name: state.employee.name,
+            rep_email: state.employee.email,
+            rep_role: state.employee.role,
+            est_id: state.employee.est_id,
+            aircall_user_id: state.aircallUserId,
+            call_date: call.date,
+            call_direction: call.direction,
+            call_duration: call.duration,
+            client_name: call.contact_name || 'Unknown',
+            client_phone: call.phone,
+        };
+
+        const evtSource = new EventSource(`/api/generate-review?_body=${encodeURIComponent(JSON.stringify(body))}`);
+
+        // Since EventSource is GET-only, we'll use fetch with streaming instead
+        evtSource.close();
+
+        fetch('/api/generate-review', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        }).then(async response => {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop(); // Keep incomplete chunk
+
+                for (const chunk of lines) {
+                    const eventMatch = chunk.match(/event: (\w+)\ndata: (.*)/s);
+                    if (!eventMatch) continue;
+
+                    const [, eventType, eventData] = eventMatch;
+
+                    if (eventType === 'status') {
+                        statusText.textContent = eventData;
+                    } else if (eventType === 'error') {
+                        statusMsg.classList.add('error');
+                        statusSpinner.style.display = 'none';
+                        statusText.textContent = eventData;
+                    } else if (eventType === 'complete') {
+                        statusBar.classList.remove('visible');
+                        try {
+                            state.reviewData = JSON.parse(eventData);
+                            renderReview(state.reviewData);
+                        } catch(e) {
+                            statusBar.classList.add('visible');
+                            statusMsg.classList.add('error');
+                            statusSpinner.style.display = 'none';
+                            statusText.textContent = 'Failed to parse review data.';
+                        }
+                    }
+                }
+            }
+        }).catch(err => {
+            statusMsg.classList.add('error');
+            statusSpinner.style.display = 'none';
+            statusText.textContent = 'Request failed: ' + err.message;
+        });
+    }
+
+    function renderReview(data) {
+        const result = document.getElementById('review-result');
+        result.classList.add('visible');
+
+        // Grade
+        document.getElementById('grade-value').textContent = data.grade || '--';
+        document.getElementById('grade-detail').textContent =
+            `${data.total_points || 0}/90 points · ${data.percentage || 0}%`;
+
+        // Scores grid
+        const grid = document.getElementById('scores-grid');
+        grid.innerHTML = '';
+        const dimLabels = {
+            rapport: 'Rapport (2x)',
+            opening: 'Opening',
+            reading_the_room: 'Reading the Room',
+            discovery: 'Discovery',
+            making_value_real: 'Making Value Real',
+            navigating_resistance: 'Navigating Resistance',
+            guiding_to_action: 'Guiding to Action',
+            confidence_knowledge: 'Confidence',
+        };
+        for (const [key, label] of Object.entries(dimLabels)) {
+            const score = data.scores?.[key]?.score || 0;
+            const cls = score >= 8 ? 'score-high' : score >= 6 ? 'score-mid' : 'score-low';
+            const div = document.createElement('div');
+            div.className = 'score-item';
+            div.innerHTML = `
+                <span class="score-label">${label}</span>
+                <span class="score-value ${cls}">${score}/10</span>
+            `;
+            div.title = data.scores?.[key]?.comment || '';
+            grid.appendChild(div);
+        }
+
+        // Highlights
+        const hlList = document.getElementById('highlights-list');
+        hlList.innerHTML = '';
+        (data.highlights || []).forEach(h => {
+            const li = document.createElement('li');
+            li.textContent = h;
+            li.style.cssText = 'margin-bottom: 6px; font-size: 14px; color: var(--gray-700); line-height: 1.5;';
+            hlList.appendChild(li);
+        });
+
+        // Top strength / dev
+        document.getElementById('top-strength').textContent = data.top_strength || '';
+        document.getElementById('top-dev').textContent = data.top_development_area || '';
+
+        // Download link
+        if (data.filename) {
+            document.getElementById('download-link').href = `/api/output/${data.filename}`;
+        }
+    }
+
+    // ---- Email ----
+    function showEmailPreview() {
+        goToStep(4);
+        const d = state.reviewData;
+        const firstName = d.rep_name?.split(' ')[0] || '';
+        const monthYear = new Date().toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+
+        document.getElementById('email-to').textContent = d.rep_email || 'No email found';
+        document.getElementById('email-subject').textContent = `Call Quality Review — ${monthYear}`;
+        document.getElementById('email-attachment').textContent = d.filename || '';
+        document.getElementById('email-body').textContent =
+`Hi ${firstName},
+
+Please find attached your call quality review for this month.
+
+The review is based on your call with ${d.client_name || 'a client'} on ${d.call_date || ''}:
+${d.call_link || ''}
+
+Have a read through and let me know if you'd like to chat about anything in the review.
+
+Kind regards,
+Anesu`;
+
+        document.getElementById('email-preview-content').classList.add('visible');
+        document.getElementById('sent-confirmation').classList.remove('visible');
+    }
+
+    async function sendEmail() {
+        const btn = document.getElementById('send-btn');
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+
+        try {
+            const d = state.reviewData;
+            const res = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rep_email: d.rep_email,
+                    rep_name: d.rep_name,
+                    client_name: d.client_name,
+                    call_date: d.call_date,
+                    call_link: d.call_link,
+                    filename: d.filename,
+                    filepath: d.filepath,
+                }),
+            });
+            const result = await res.json();
+
+            if (result.error) {
+                alert('Send failed: ' + result.error);
+                btn.disabled = false;
+                btn.textContent = 'Confirm & Send';
+                return;
+            }
+
+            // Show confirmation
+            document.getElementById('email-preview-content').classList.remove('visible');
+            document.getElementById('sent-confirmation').classList.add('visible');
+            document.getElementById('sent-detail').textContent =
+                `Review sent to ${d.rep_email} with call link and document attached.`;
+        } catch(err) {
+            alert('Send failed: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Confirm & Send';
+        }
+    }
+
+    // ---- Util ----
+    function escHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    // Auto-focus search on load
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('search-input').focus();
+    });
+</script>
+
+</body>
+</html>

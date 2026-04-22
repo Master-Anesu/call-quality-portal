@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: call-quality-portal
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: MCP_API_KEY
+        sync: false
+      - key: WORKSPACE_USER_ID
+        sync: false
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_API_VERSION
+        value: "2025-01-01-preview"
+      - key: AZURE_OPENAI_DEPLOYMENT_NAME
+        value: "trilogy-gpt-4.1"
+      - key: PYTHON_VERSION
+        value: "3.11.11"
