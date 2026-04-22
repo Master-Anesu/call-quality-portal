@@ -918,11 +918,15 @@
         const statusSpinner = document.getElementById('status-spinner');
         const statusMsg = document.getElementById('status-message');
         const reviewResult = document.getElementById('review-result');
+        const progressTrack = document.getElementById('progress-track');
+        const progressFill = document.getElementById('progress-fill');
 
         statusBar.classList.add('visible');
         statusMsg.classList.remove('error');
         statusSpinner.style.display = 'block';
         reviewResult.classList.remove('visible');
+        progressTrack.classList.remove('visible');
+        progressFill.style.width = '0%';
         statusText.textContent = 'Starting review...';
 
         const body = {
