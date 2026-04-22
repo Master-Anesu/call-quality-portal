@@ -501,14 +501,24 @@ def generate_review():
         transcript_result = call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
         transcript_text = ''
         if isinstance(transcript_result, dict):
-            if 'error' in transcript_result:
+            # Check for actual errors (key exists AND value is truthy)
+            if transcript_result.get('error'):
                 yield sse_msg('error', f"Failed to get transcript: {transcript_result['error']}")
                 return
-            transcript_text = transcript_result.get('raw', '') or transcript_result.get('transcript', '') or json.dumps(transcript_result)
+            # Extract transcript from result.transcript_segments
+            result = transcript_result.get('result', transcript_result)
+            segments = result.get('transcript_segments', [])
+            if segments:
+                transcript_text = '\n'.join(
+                    f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
+                    for seg in segments if seg.get('text')
+                )
+            else:
+                transcript_text = result.get('raw', '') or result.get('transcript', '') or ''
         else:
             transcript_text = str(transcript_result)
 
-        if not transcript_text or transcript_text == '{}':
+        if not transcript_text:
             yield sse_msg('error', 'No transcript available for this call.')
             return
 
