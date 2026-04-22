@@ -833,17 +833,28 @@
             return;
         }
 
-        document.getElementById('calls-subtitle').textContent = `${calls.length} recent calls — select one to review`;
+        // Filter: only calls with transcripts and longer than 10 minutes (600s)
+        const eligible = calls.filter(c =>
+            c.has_transcript === 'true' && c.duration && c.duration > 600
+        );
 
-        calls.slice(0, 15).forEach(call => {
+        if (!eligible.length) {
+            document.getElementById('calls-subtitle').textContent =
+                `${calls.length} recent calls found, but none have a transcript and are over 10 minutes. Transcripts may take time to process.`;
+            return;
+        }
+
+        document.getElementById('calls-subtitle').textContent = `${eligible.length} reviewable calls (10+ min with transcript)`;
+
+        eligible.slice(0, 15).forEach(call => {
             const direction = call.direction || 'unknown';
             const duration = call.duration ? Math.round(call.duration / 60) : 0;
-            const startedAt = call.started_at ? new Date(call.started_at * 1000).toLocaleString('en-AU', {
+            const startedAt = call.created_at ? new Date(call.created_at).toLocaleString('en-AU', {
                 day: 'numeric', month: 'short', year: 'numeric',
                 hour: '2-digit', minute: '2-digit', hour12: true
             }) : 'Unknown date';
-            const phone = call.raw_digits || call.number?.digits || '';
-            const contactName = call.contact?.display_name || call.contact?.first_name || '';
+            const phone = call.phone_number || call.raw_digits || '';
+            const contactName = call.company_name || call.contact_phone || '';
 
             const li = document.createElement('li');
             li.className = 'call-item fade-in';
