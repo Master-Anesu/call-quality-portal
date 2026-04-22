@@ -352,6 +352,23 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        .progress-track {
+            height: 4px;
+            background: var(--gray-200);
+            border-radius: 2px;
+            margin-top: 12px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-track.visible { display: block; }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--teal), var(--dark-teal));
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
         /* Review result */
         .review-result { display: none; }
         .review-result.visible { display: block; }
@@ -567,6 +584,9 @@
                 <div class="status-message" id="status-message">
                     <div class="spinner" id="status-spinner"></div>
                     <span id="status-text">Preparing...</span>
+                </div>
+                <div class="progress-track" id="progress-track">
+                    <div class="progress-fill" id="progress-fill"></div>
                 </div>
             </div>
 
@@ -949,6 +969,18 @@
 
                     if (eventType === 'status') {
                         statusText.textContent = eventData;
+                        // Show progress bar during scoring phase
+                        if (eventData.includes('Scoring in progress')) {
+                            progressTrack.classList.add('visible');
+                            const match = eventData.match(/(\d+)k chars/);
+                            if (match) {
+                                // Estimate: ~16k chars total output, cap at 95%
+                                const pct = Math.min(95, (parseInt(match[1]) / 16) * 100);
+                                progressFill.style.width = pct + '%';
+                            }
+                        } else if (eventData.includes('Word document')) {
+                            progressFill.style.width = '100%';
+                        }
                     } else if (eventType === 'error') {
                         statusMsg.classList.add('error');
                         statusSpinner.style.display = 'none';

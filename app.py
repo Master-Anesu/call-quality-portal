@@ -11,6 +11,7 @@ import time
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, jsonify, request, Response
 
@@ -58,15 +59,15 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 # Azure OpenAI
 # ---------------------------------------------------------------------------
 
-def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> str:
-    """Call Azure OpenAI GPT-4.1 for scoring and review generation."""
+def call_llm_streaming(system_prompt: str, user_prompt: str, max_tokens: int = 4000):
+    """Call Azure OpenAI GPT-4.1 with streaming. Yields chunks as they arrive."""
     from openai import AzureOpenAI
     client = AzureOpenAI(
         api_key=AZURE_OPENAI_API_KEY,
         api_version=AZURE_OPENAI_API_VERSION,
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
     )
-    resp = client.chat.completions.create(
+    stream = client.chat.completions.create(
         model=AZURE_OPENAI_DEPLOYMENT,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -74,8 +75,11 @@ def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> st
         ],
         max_tokens=max_tokens,
         temperature=0.3,
+        stream=True,
     )
-    return resp.choices[0].message.content
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 # ---------------------------------------------------------------------------
@@ -496,44 +500,51 @@ def generate_review():
     client_phone = data.get('client_phone', '')
 
     def stream():
-        # Step 1: Get transcript
+        # Step 1: Fetch transcript + client lookup IN PARALLEL
         yield sse_msg('status', 'Fetching call transcript...')
-        transcript_result = call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
+
         transcript_text = ''
-        if isinstance(transcript_result, dict):
-            # Check for actual errors (key exists AND value is truthy)
-            if transcript_result.get('error'):
-                yield sse_msg('error', f"Failed to get transcript: {transcript_result['error']}")
-                return
-            # Extract transcript from result.transcript_segments
-            result = transcript_result.get('result', transcript_result)
-            segments = result.get('transcript_segments', [])
-            if segments:
-                transcript_text = '\n'.join(
-                    f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
-                    for seg in segments if seg.get('text')
-                )
+        resolved_client = client_name
+
+        def fetch_transcript():
+            return call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
+
+        def fetch_client():
+            if client_name != 'Unknown' or not client_phone:
+                return None
+            return call_mcp_tool('search_customers', {'query': client_phone})
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            future_transcript = pool.submit(fetch_transcript)
+            future_client = pool.submit(fetch_client)
+
+            transcript_result = future_transcript.result()
+            if isinstance(transcript_result, dict):
+                if transcript_result.get('error'):
+                    yield sse_msg('error', f"Failed to get transcript: {transcript_result['error']}")
+                    return
+                result = transcript_result.get('result', transcript_result)
+                segments = result.get('transcript_segments', [])
+                if segments:
+                    transcript_text = '\n'.join(
+                        f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
+                        for seg in segments if seg.get('text')
+                    )
+                else:
+                    transcript_text = result.get('raw', '') or result.get('transcript', '') or ''
             else:
-                transcript_text = result.get('raw', '') or result.get('transcript', '') or ''
-        else:
-            transcript_text = str(transcript_result)
+                transcript_text = str(transcript_result)
 
-        if not transcript_text:
-            yield sse_msg('error', 'No transcript available for this call.')
-            return
+            if not transcript_text:
+                yield sse_msg('error', 'No transcript available for this call.')
+                return
 
-        yield sse_msg('status', 'Transcript loaded. Scoring call...')
-
-        # Step 2: Try to identify client from phone number
-        if client_name == 'Unknown' and client_phone:
-            yield sse_msg('status', 'Looking up client...')
-            client_result = call_mcp_tool('search_customers', {'query': client_phone})
-            if isinstance(client_result, dict) and not client_result.get('error'):
-                # Try to extract name from result
+            client_result = future_client.result()
+            if client_result and isinstance(client_result, dict) and not client_result.get('error'):
                 raw = client_result.get('raw', '') or json.dumps(client_result)
-                client_name = extract_client_name(raw) or 'Unknown'
+                resolved_client = extract_client_name(raw) or client_name
 
-        # Step 3: Score with LLM
+        # Step 2: Score with LLM — STREAMING for live progress
         yield sse_msg('status', 'AI is scoring the call across 8 dimensions...')
 
         scoring_prompt = f"""Score this call quality review.
@@ -542,7 +553,7 @@ REP: {rep_name} ({rep_role})
 CALL DATE: {call_date}
 DIRECTION: {call_direction}
 DURATION: {call_duration} minutes
-CLIENT: {client_name}
+CLIENT: {resolved_client}
 
 TRANSCRIPT:
 {transcript_text[:12000]}
@@ -550,8 +561,17 @@ TRANSCRIPT:
 Score each dimension 1-10 based on the rubric. Be specific and reference real moments from the transcript. Return valid JSON only."""
 
         try:
-            llm_response = call_llm(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=4000)
-            # Parse JSON from response
+            llm_chunks = []
+            token_count = 0
+            last_progress = 0
+            for chunk in call_llm_streaming(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=4000):
+                llm_chunks.append(chunk)
+                token_count += 1
+                progress = token_count // 80
+                if progress > last_progress:
+                    last_progress = progress
+                    yield sse_msg('status', f'Scoring in progress... ({token_count * 4 // 1000}k chars generated)')
+            llm_response = ''.join(llm_chunks)
             review_json = parse_json_from_response(llm_response)
         except Exception as e:
             yield sse_msg('error', f"LLM scoring failed: {str(e)}")
@@ -559,7 +579,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
 
         yield sse_msg('status', 'Generating Word document...')
 
-        # Step 4: Build review data
+        # Step 3: Build review data and generate doc
         review_data = {
             'rep_name': rep_name,
             'rep_email': rep_email,
@@ -569,7 +589,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             'call_date': call_date,
             'direction': call_direction,
             'duration': call_duration,
-            'client_name': client_name,
+            'client_name': resolved_client,
             'client_phone': client_phone,
             'call_story': review_json.get('call_story', ''),
             'outcome': review_json.get('outcome', ''),
