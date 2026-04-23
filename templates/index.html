@@ -1114,8 +1114,8 @@ Anesu`;
             });
             const result = await res.json();
 
-            if (result.error) {
-                alert('Send failed: ' + result.error);
+            if (!res.ok || result.error) {
+                alert('Send failed: ' + (result.error || `Server returned ${res.status}`));
                 btn.disabled = false;
                 btn.textContent = 'Confirm & Send';
                 return;

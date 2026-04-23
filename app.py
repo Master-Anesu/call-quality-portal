@@ -59,7 +59,7 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 # Azure OpenAI
 # ---------------------------------------------------------------------------
 
-def call_llm_streaming(system_prompt: str, user_prompt: str, max_tokens: int = 4000):
+def call_llm_streaming(system_prompt: str, user_prompt: str, max_tokens: int = 2500):
     """Call Azure OpenAI GPT-4.1 with streaming. Yields chunks as they arrive."""
     from openai import AzureOpenAI
     client = AzureOpenAI(
@@ -76,6 +76,7 @@ def call_llm_streaming(system_prompt: str, user_prompt: str, max_tokens: int = 4
         max_tokens=max_tokens,
         temperature=0.3,
         stream=True,
+        response_format={"type": "json_object"},
     )
     for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
@@ -556,7 +557,7 @@ DURATION: {call_duration} minutes
 CLIENT: {resolved_client}
 
 TRANSCRIPT:
-{transcript_text[:12000]}
+{transcript_text[:8000]}
 
 Score each dimension 1-10 based on the rubric. Be specific and reference real moments from the transcript. Return valid JSON only."""
 
@@ -564,7 +565,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             llm_chunks = []
             token_count = 0
             last_progress = 0
-            for chunk in call_llm_streaming(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=4000):
+            for chunk in call_llm_streaming(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=2500):
                 llm_chunks.append(chunk)
                 token_count += 1
                 progress = token_count // 80
@@ -621,8 +622,10 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
 
 
 @app.route('/api/send-email', methods=['POST'])
-def send_email():
+def send_email_route():
     """Send the review document via email."""
+    import base64
+
     data = request.json
     rep_email = data.get('rep_email', '')
     rep_name = data.get('rep_name', '')
@@ -633,6 +636,9 @@ def send_email():
     filename = data.get('filename', '')
     filepath = data.get('filepath', '')
     month_year = datetime.now().strftime('%B %Y')
+
+    if not rep_email:
+        return jsonify({'error': 'No recipient email address provided.'}), 400
 
     subject = f"Call Quality Review — {month_year}"
     body = f"""Hi {first_name},
@@ -647,15 +653,35 @@ Have a read through and let me know if you'd like to chat about anything in the 
 Kind regards,
 Anesu"""
 
-    # Upload file to OneDrive first so we can attach it
-    # Then send email with attachment
+    # Build email args — do NOT pass 'from', identity is auto-injected by MCP
+    email_args = {
+        'to': rep_email,
+        'subject': subject,
+        'body': body,
+    }
+
+    # Attach the .docx if it exists on disk
+    if filepath and os.path.isfile(filepath):
+        try:
+            with open(filepath, 'rb') as f:
+                file_bytes = f.read()
+            email_args['attachments'] = [{
+                'name': filename or os.path.basename(filepath),
+                'content_bytes': base64.b64encode(file_bytes).decode('utf-8'),
+                'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            }]
+        except Exception:
+            pass  # Send without attachment if file read fails
+
     try:
-        result = call_mcp_tool('send_email', {
-            'to': rep_email,
-            'subject': subject,
-            'body': body,
-            'from': SENDER_EMAIL,
-        })
+        result = call_mcp_tool('send_email', email_args)
+        # Check if MCP returned an error in the response
+        if isinstance(result, dict) and result.get('error'):
+            return jsonify({'error': result['error']}), 500
+        # Also check nested result for errors
+        inner = result.get('result', {}) if isinstance(result, dict) else {}
+        if isinstance(inner, dict) and inner.get('error'):
+            return jsonify({'error': inner['error']}), 500
         return jsonify({'success': True, 'result': result})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
