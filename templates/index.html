@@ -550,6 +550,16 @@
     <!-- Panel 1: Search -->
     <div class="panel active" id="panel-1">
         <div class="card">
+            <div class="card-title">Quick Review &mdash; Paste Call Link</div>
+            <p class="text-muted" style="margin-bottom: 12px;">Paste an Aircall call link to review directly. Rep details looked up automatically.</p>
+            <div class="search-group">
+                <input type="text" class="search-input" id="call-link-input" placeholder="https://assets.aircall.io/calls/12345/recording" autocomplete="off">
+                <button class="btn btn-teal" id="quick-review-btn" onclick="quickReviewFromLink()">Review</button>
+            </div>
+            <div id="quick-review-error" class="text-muted" style="color: var(--red); margin-top: 8px; display: none;"></div>
+        </div>
+        <div style="text-align: center; color: var(--gray-300); font-size: 13px; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px;">OR</div>
+        <div class="card">
             <div class="card-title">Search for a sales representative</div>
             <div class="search-group">
                 <input type="text" class="search-input" id="search-input"
@@ -698,9 +708,76 @@
     }
 
     // ---- Search ----
-    document.getElementById('search-input').addEventListener('keydown', e => {
-        if (e.key === 'Enter') searchEmployee();
-    });
+    document.getElementById('call-link-input').addEventListener('keydown', e => { if (e.key === 'Enter') quickReviewFromLink(); });
+    document.getElementById('search-input').addEventListener('keydown', e => { if (e.key === 'Enter') searchEmployee(); });
+
+    async function quickReviewFromLink() {
+        const input = document.getElementById('call-link-input').value.trim();
+        const errorDiv = document.getElementById('quick-review-error');
+        errorDiv.style.display = 'none';
+        if (!input) return;
+        let callId = null;
+        const match = input.match(/calls\/(\d+)/);
+        if (match) callId = match[1];
+        else if (/^\d+$/.test(input)) callId = input;
+        if (!callId) { errorDiv.textContent = 'Could not extract call ID from that link.'; errorDiv.style.display = 'block'; return; }
+        const btn = document.getElementById('quick-review-btn');
+        btn.disabled = true; btn.textContent = 'Looking up call...';
+        try {
+            const res = await fetch('/api/start-review-from-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ call_id: callId }) });
+            const data = await res.json();
+            if (!res.ok || data.error) { errorDiv.textContent = data.error || 'Failed to start review'; errorDiv.style.display = 'block'; return; }
+            state.employee = { name: data.rep_name || '', email: data.rep_email || '', role: data.rep_role || '', est_id: data.est_id || '' };
+            state.selectedCall = { id: callId, direction: data.call_direction || '', duration: data.call_duration || '', date: data.call_date || '', phone: data.client_phone || '', contact_name: data.client_name || '' };
+            goToStep(3);
+            pollForQuickReview(data.job_id);
+        } catch (err) { errorDiv.textContent = 'Request failed: ' + err.message; errorDiv.style.display = 'block';
+        } finally { btn.disabled = false; btn.textContent = 'Review'; }
+    }
+
+    function pollForQuickReview(jobId) {
+        const statusBar = document.getElementById('status-bar');
+        const statusText = document.getElementById('status-text');
+        const statusSpinner = document.getElementById('status-spinner');
+        const statusMsg = document.getElementById('status-message');
+        const reviewResult = document.getElementById('review-result');
+        const progressTrack = document.getElementById('progress-track');
+        const progressFill = document.getElementById('progress-fill');
+        statusBar.classList.add('visible'); statusMsg.classList.remove('error');
+        statusSpinner.style.display = 'block'; reviewResult.classList.remove('visible');
+        progressTrack.classList.add('visible'); progressFill.style.width = '10%';
+        statusText.textContent = 'Fetching transcript...';
+        let elapsed = 0;
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = setInterval(async () => {
+            elapsed += 2;
+            try {
+                const r = await fetch('/api/review-status/' + jobId);
+                const j = await r.json();
+                if (j.status === 'complete') {
+                    clearInterval(pollTimer); pollTimer = null;
+                    progressFill.style.width = '100%';
+                    statusText.textContent = 'Review complete!';
+                    setTimeout(() => { statusBar.classList.remove('visible'); state.reviewData = j.result; renderReview(state.reviewData); }, 500);
+                    return;
+                }
+                if (j.status === 'error') {
+                    clearInterval(pollTimer); pollTimer = null;
+                    statusMsg.classList.add('error'); statusSpinner.style.display = 'none';
+                    progressTrack.classList.remove('visible');
+                    statusText.textContent = j.message || 'Review failed.';
+                    return;
+                }
+                if (j.message) statusText.textContent = j.message;
+            } catch (e) { console.warn('Poll error', e); }
+            progressFill.style.width = Math.min(10 + elapsed * 2, 95) + '%';
+            if (elapsed > 300) {
+                clearInterval(pollTimer); pollTimer = null;
+                statusMsg.classList.add('error'); statusSpinner.style.display = 'none';
+                statusText.textContent = 'Review timed out. Please try again.';
+            }
+        }, 2000);
+    }
 
     async function searchEmployee() {
         const name = document.getElementById('search-input').value.trim();
