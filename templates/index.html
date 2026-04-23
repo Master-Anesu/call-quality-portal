@@ -1005,21 +1005,30 @@
                         return;
                     }
 
-                    // Update progress message from server or estimated steps
+                    // Update status text from server message
                     if (job.message) {
                         statusText.textContent = job.message;
                     }
-                    // Animate progress bar based on elapsed time
-                    for (let i = stepMessages.length - 1; i >= 0; i--) {
-                        if (elapsed >= stepMessages[i].at) {
-                            progressFill.style.width = Math.min(stepMessages[i].pct, 95) + '%';
-                            break;
-                        }
-                    }
 
                 } catch (pollErr) {
-                    // Network blip — keep polling, don't abort
+                    // Network blip — show estimated step message as fallback
                     console.warn('Poll failed, retrying...', pollErr);
+                }
+
+                // Always animate progress bar and fallback text based on elapsed time
+                for (let i = stepMessages.length - 1; i >= 0; i--) {
+                    if (elapsed >= stepMessages[i].at) {
+                        progressFill.style.width = Math.min(stepMessages[i].pct, 95) + '%';
+                        // Update text if still on the initial message
+                        if (statusText.textContent === 'Starting review...' ||
+                            statusText.textContent.startsWith('Fetching') ||
+                            statusText.textContent.startsWith('AI is') ||
+                            statusText.textContent.startsWith('Still') ||
+                            statusText.textContent.startsWith('Almost')) {
+                            statusText.textContent = stepMessages[i].msg;
+                        }
+                        break;
+                    }
                 }
 
                 // Safety: timeout after 5 minutes
