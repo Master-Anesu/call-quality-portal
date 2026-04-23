@@ -1,6 +1,7 @@
 """
 Call Quality Review Portal — Trilogy Care
 Flask app that automates call quality reviews for sales reps.
+Uses background jobs + polling instead of SSE to avoid Render request timeouts.
 """
 
 import os
@@ -9,6 +10,8 @@ import json
 import subprocess
 import time
 import re
+import uuid
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -59,15 +62,15 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 # Azure OpenAI
 # ---------------------------------------------------------------------------
 
-def call_llm_streaming(system_prompt: str, user_prompt: str, max_tokens: int = 2500):
-    """Call Azure OpenAI GPT-4.1 with streaming. Yields chunks as they arrive."""
+def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> str:
+    """Call Azure OpenAI GPT-4.1 (non-streaming). Returns the full response text."""
     from openai import AzureOpenAI
     client = AzureOpenAI(
         api_key=AZURE_OPENAI_API_KEY,
         api_version=AZURE_OPENAI_API_VERSION,
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
     )
-    stream = client.chat.completions.create(
+    response = client.chat.completions.create(
         model=AZURE_OPENAI_DEPLOYMENT,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -75,12 +78,10 @@ def call_llm_streaming(system_prompt: str, user_prompt: str, max_tokens: int = 2
         ],
         max_tokens=max_tokens,
         temperature=0.3,
-        stream=True,
+        stream=False,
         response_format={"type": "json_object"},
     )
-    for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+    return response.choices[0].message.content or ""
 
 
 # ---------------------------------------------------------------------------
@@ -484,26 +485,43 @@ def get_calls():
     return jsonify(result)
 
 
-@app.route('/api/generate-review', methods=['POST'])
-def generate_review():
-    """Full pipeline: get transcript, score, generate doc. Returns SSE stream."""
+@app.route('/api/start-review', methods=['POST'])
+def start_review():
+    """Kick off the review pipeline in a background thread. Returns a job_id for polling."""
     data = request.json
-    call_id = data.get('call_id')
-    rep_name = data.get('rep_name', '')
-    rep_email = data.get('rep_email', '')
-    rep_role = data.get('rep_role', '')
-    est_id = data.get('est_id', '')
-    aircall_user_id = data.get('aircall_user_id', '')
-    call_date = data.get('call_date', '')
-    call_direction = data.get('call_direction', '')
-    call_duration = data.get('call_duration', '')
-    client_name = data.get('client_name', 'Unknown')
-    client_phone = data.get('client_phone', '')
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {'status': 'running', 'message': 'Fetching call transcript...', 'result': None, 'error': None}
 
-    def stream():
+    thread = threading.Thread(target=run_review_pipeline, args=(job_id, data), daemon=True)
+    thread.start()
+
+    return jsonify({'job_id': job_id})
+
+
+@app.route('/api/review-status/<job_id>', methods=['GET'])
+def review_status(job_id):
+    """Poll for the status of a review job."""
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(job)
+
+
+def run_review_pipeline(job_id: str, data: dict):
+    """Background worker: fetch transcript, score with LLM, generate doc."""
+    try:
+        call_id = data.get('call_id')
+        rep_name = data.get('rep_name', '')
+        rep_email = data.get('rep_email', '')
+        rep_role = data.get('rep_role', '')
+        est_id = data.get('est_id', '')
+        call_date = data.get('call_date', '')
+        call_direction = data.get('call_direction', '')
+        call_duration = data.get('call_duration', '')
+        client_name = data.get('client_name', 'Unknown')
+        client_phone = data.get('client_phone', '')
+
         # Step 1: Fetch transcript + client lookup IN PARALLEL
-        yield sse_msg('status', 'Fetching call transcript...')
-
         transcript_text = ''
         resolved_client = client_name
 
@@ -522,7 +540,7 @@ def generate_review():
             transcript_result = future_transcript.result()
             if isinstance(transcript_result, dict):
                 if transcript_result.get('error'):
-                    yield sse_msg('error', f"Failed to get transcript: {transcript_result['error']}")
+                    jobs[job_id] = {'status': 'error', 'message': f"Failed to get transcript: {transcript_result['error']}", 'result': None, 'error': transcript_result['error']}
                     return
                 result = transcript_result.get('result', transcript_result)
                 segments = result.get('transcript_segments', [])
@@ -537,7 +555,7 @@ def generate_review():
                 transcript_text = str(transcript_result)
 
             if not transcript_text:
-                yield sse_msg('error', 'No transcript available for this call.')
+                jobs[job_id] = {'status': 'error', 'message': 'No transcript available for this call.', 'result': None, 'error': 'No transcript'}
                 return
 
             client_result = future_client.result()
@@ -545,8 +563,8 @@ def generate_review():
                 raw = client_result.get('raw', '') or json.dumps(client_result)
                 resolved_client = extract_client_name(raw) or client_name
 
-        # Step 2: Score with LLM — STREAMING for live progress
-        yield sse_msg('status', 'AI is scoring the call across 8 dimensions...')
+        # Step 2: Score with LLM (non-streaming — no connection to keep alive)
+        jobs[job_id]['message'] = 'AI is scoring the call across 8 dimensions...'
 
         scoring_prompt = f"""Score this call quality review.
 
@@ -557,30 +575,24 @@ DURATION: {call_duration} minutes
 CLIENT: {resolved_client}
 
 TRANSCRIPT:
-{transcript_text[:8000]}
+{transcript_text[:12000]}
 
 Score each dimension 1-10 based on the rubric. Be specific and reference real moments from the transcript. Return valid JSON only."""
 
         try:
-            llm_chunks = []
-            token_count = 0
-            last_progress = 0
-            for chunk in call_llm_streaming(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=2500):
-                llm_chunks.append(chunk)
-                token_count += 1
-                progress = token_count // 80
-                if progress > last_progress:
-                    last_progress = progress
-                    yield sse_msg('status', f'Scoring in progress... ({token_count * 4 // 1000}k chars generated)')
-            llm_response = ''.join(llm_chunks)
+            llm_response = call_llm(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=4000)
             review_json = parse_json_from_response(llm_response)
         except Exception as e:
-            yield sse_msg('error', f"LLM scoring failed: {str(e)}")
+            jobs[job_id] = {'status': 'error', 'message': f"LLM scoring failed: {str(e)}", 'result': None, 'error': str(e)}
             return
 
-        yield sse_msg('status', 'Generating Word document...')
+        if not review_json or not review_json.get('scores'):
+            jobs[job_id] = {'status': 'error', 'message': 'LLM returned invalid or incomplete JSON. Please retry.', 'result': None, 'error': 'Invalid JSON from LLM'}
+            return
 
-        # Step 3: Build review data and generate doc
+        # Step 3: Build review data and generate Word doc
+        jobs[job_id]['message'] = 'Generating Word document...'
+
         review_data = {
             'rep_name': rep_name,
             'rep_email': rep_email,
@@ -602,23 +614,21 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             'coaching_recommendations': review_json.get('coaching_recommendations', []),
         }
 
-        # Step 5: Generate Word doc
         try:
             filepath = generate_word_doc(review_data)
-            yield sse_msg('status', 'Document generated successfully!')
         except Exception as e:
-            yield sse_msg('error', f"Document generation failed: {str(e)}")
+            jobs[job_id] = {'status': 'error', 'message': f"Document generation failed: {str(e)}", 'result': None, 'error': str(e)}
             return
 
-        # Step 6: Return review summary
         call_link = f"https://app.aircall.io/calls/{call_id}"
         review_data['call_link'] = call_link
         review_data['filepath'] = filepath
         review_data['filename'] = os.path.basename(filepath)
 
-        yield sse_msg('complete', json.dumps(review_data))
+        jobs[job_id] = {'status': 'complete', 'message': 'Review complete!', 'result': review_data, 'error': None}
 
-    return Response(stream(), mimetype='text/event-stream')
+    except Exception as e:
+        jobs[job_id] = {'status': 'error', 'message': f"Unexpected error: {str(e)}", 'result': None, 'error': str(e)}
 
 
 @app.route('/api/send-email', methods=['POST'])
@@ -697,10 +707,6 @@ def download_file(filename):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def sse_msg(event: str, data: str) -> str:
-    return f"event: {event}\ndata: {data}\n\n"
-
 
 def extract_client_name(raw: str) -> str:
     """Try to extract a client name from search results."""

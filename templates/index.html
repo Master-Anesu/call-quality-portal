@@ -910,8 +910,10 @@
         generateReview(call);
     }
 
-    // ---- Generate Review ----
-    function generateReview(call) {
+    // ---- Generate Review (background job + polling) ----
+    let pollTimer = null;
+
+    async function generateReview(call) {
         goToStep(3);
         const statusBar = document.getElementById('status-bar');
         const statusText = document.getElementById('status-text');
@@ -925,7 +927,7 @@
         statusMsg.classList.remove('error');
         statusSpinner.style.display = 'block';
         reviewResult.classList.remove('visible');
-        progressTrack.classList.remove('visible');
+        progressTrack.classList.add('visible');
         progressFill.style.width = '0%';
         statusText.textContent = 'Starting review...';
 
@@ -943,71 +945,99 @@
             client_phone: call.phone,
         };
 
-        const evtSource = new EventSource(`/api/generate-review?_body=${encodeURIComponent(JSON.stringify(body))}`);
+        try {
+            // Step 1: Start the background job
+            const startRes = await fetch('/api/start-review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const startData = await startRes.json();
 
-        // Since EventSource is GET-only, we'll use fetch with streaming instead
-        evtSource.close();
+            if (!startRes.ok || !startData.job_id) {
+                statusMsg.classList.add('error');
+                statusSpinner.style.display = 'none';
+                statusText.textContent = 'Failed to start review: ' + (startData.error || 'Unknown error');
+                return;
+            }
 
-        fetch('/api/generate-review', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        }).then(async response => {
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
+            // Step 2: Poll for status every 2 seconds
+            const jobId = startData.job_id;
+            let elapsed = 0;
+            const stepMessages = [
+                { at: 0, msg: 'Fetching call transcript...', pct: 10 },
+                { at: 6, msg: 'AI is scoring the call across 8 dimensions...', pct: 30 },
+                { at: 14, msg: 'Still scoring — analysing conversation quality...', pct: 50 },
+                { at: 24, msg: 'Almost there — finalising scores...', pct: 70 },
+                { at: 40, msg: 'Generating Word document...', pct: 85 },
+            ];
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            if (pollTimer) clearInterval(pollTimer);
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n\n');
-                buffer = lines.pop(); // Keep incomplete chunk
+            pollTimer = setInterval(async () => {
+                elapsed += 2;
 
-                for (const chunk of lines) {
-                    const eventMatch = chunk.match(/event: (\w+)\ndata: (.*)/s);
-                    if (!eventMatch) continue;
+                try {
+                    const pollRes = await fetch(`/api/review-status/${jobId}`);
+                    const job = await pollRes.json();
 
-                    const [, eventType, eventData] = eventMatch;
+                    if (job.status === 'complete') {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                        progressFill.style.width = '100%';
+                        statusText.textContent = 'Review complete!';
 
-                    if (eventType === 'status') {
-                        statusText.textContent = eventData;
-                        // Show progress bar during scoring phase
-                        if (eventData.includes('Scoring in progress')) {
-                            progressTrack.classList.add('visible');
-                            const match = eventData.match(/(\d+)k chars/);
-                            if (match) {
-                                // Estimate: ~16k chars total output, cap at 95%
-                                const pct = Math.min(95, (parseInt(match[1]) / 16) * 100);
-                                progressFill.style.width = pct + '%';
-                            }
-                        } else if (eventData.includes('Word document')) {
-                            progressFill.style.width = '100%';
-                        }
-                    } else if (eventType === 'error') {
+                        setTimeout(() => {
+                            statusBar.classList.remove('visible');
+                            state.reviewData = job.result;
+                            renderReview(state.reviewData);
+                        }, 500);
+                        return;
+                    }
+
+                    if (job.status === 'error') {
+                        clearInterval(pollTimer);
+                        pollTimer = null;
                         statusMsg.classList.add('error');
                         statusSpinner.style.display = 'none';
-                        statusText.textContent = eventData;
-                    } else if (eventType === 'complete') {
-                        statusBar.classList.remove('visible');
-                        try {
-                            state.reviewData = JSON.parse(eventData);
-                            renderReview(state.reviewData);
-                        } catch(e) {
-                            statusBar.classList.add('visible');
-                            statusMsg.classList.add('error');
-                            statusSpinner.style.display = 'none';
-                            statusText.textContent = 'Failed to parse review data.';
+                        progressTrack.classList.remove('visible');
+                        statusText.textContent = job.message || 'Review failed.';
+                        return;
+                    }
+
+                    // Update progress message from server or estimated steps
+                    if (job.message) {
+                        statusText.textContent = job.message;
+                    }
+                    // Animate progress bar based on elapsed time
+                    for (let i = stepMessages.length - 1; i >= 0; i--) {
+                        if (elapsed >= stepMessages[i].at) {
+                            progressFill.style.width = Math.min(stepMessages[i].pct, 95) + '%';
+                            break;
                         }
                     }
+
+                } catch (pollErr) {
+                    // Network blip — keep polling, don't abort
+                    console.warn('Poll failed, retrying...', pollErr);
                 }
-            }
-        }).catch(err => {
+
+                // Safety: timeout after 5 minutes
+                if (elapsed > 300) {
+                    clearInterval(pollTimer);
+                    pollTimer = null;
+                    statusMsg.classList.add('error');
+                    statusSpinner.style.display = 'none';
+                    statusText.textContent = 'Review timed out. Please try again.';
+                }
+
+            }, 2000);
+
+        } catch (err) {
             statusMsg.classList.add('error');
             statusSpinner.style.display = 'none';
             statusText.textContent = 'Request failed: ' + err.message;
-        });
+        }
     }
 
     function renderReview(data) {
