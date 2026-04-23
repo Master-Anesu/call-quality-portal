@@ -526,86 +526,71 @@ def review_status(job_id):
 
 
 
-@app.route('/api/start-review-from-link', methods=['POST'])
-def start_review_from_link():
-    """Start a review from a pasted Aircall call link. Looks up call details and rep info."""
-    data = request.json
-    call_id = data.get('call_id', '').strip()
-    if not call_id:
-        return jsonify({'error': 'No call ID provided.'}), 400
+@app.route('/api/start-review-from-transcript', methods=['POST'])
+def start_review_from_transcript():
+    """Start a review from an uploaded transcript file. Extracts rep name from content."""
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'error': 'Please upload a transcript file.'}), 400
+    try:
+        raw = file.read()
+        transcript = raw.decode('utf-8', errors='replace').strip()
+    except Exception as e:
+        return jsonify({'error': f'Could not read file: {str(e)}'}), 400
+    if len(transcript) < 100:
+        return jsonify({'error': 'Transcript seems too short. Please upload the full call transcript.'}), 400
 
-    call_result = call_mcp_tool('get_aircall_call_details', {'call_id': call_id})
-    if isinstance(call_result, dict) and call_result.get('error'):
-        return jsonify({'error': f"Could not fetch call: {call_result['error']}"}), 400
+    rep_name = ''
+    m = re.search(r'(?:agent|rep|representative|advisor)[:\s]+([A-Z][a-z]+ [A-Z][a-z]+)', transcript[:2000], re.IGNORECASE)
+    if m: rep_name = m.group(1).strip()
+    if not rep_name:
+        m = re.search(r'\[agent\]\s*([A-Z][a-z]+ ?[A-Z]?[a-z]*)', transcript[:2000])
+        if m: rep_name = m.group(1).strip()
+    if not rep_name:
+        m = re.search(r"(?:my name is|this is|I'm|I am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:from|at|with)\s+Trilogy", transcript[:3000], re.IGNORECASE)
+        if m: rep_name = m.group(1).strip()
+    if not rep_name:
+        base = os.path.splitext(file.filename)[0]
+        parts = re.split(r'[_\-\s]+', base)
+        name_parts = [p for p in parts if p[0:1].isupper() and len(p) > 1 and p.lower() not in ('call', 'transcript', 'review', 'recording', 'aircall')]
+        if len(name_parts) >= 2: rep_name = ' '.join(name_parts[:2])
+    if not rep_name:
+        return jsonify({'error': 'Could not detect the rep name from the transcript. Please rename the file to include the rep name (e.g. "Sarah Palmer transcript.txt").'}), 400
 
-    call_data = call_result.get('result', call_result)
-    call_obj = call_data.get('call', call_data) if isinstance(call_data, dict) else {}
-
-    user_info = call_obj.get('user', {}) if isinstance(call_obj, dict) else {}
-    rep_name = user_info.get('name', '').replace(' - SR', '').replace(' - CSR', '').strip()
-    rep_email = user_info.get('email', '')
-
-    call_direction = call_obj.get('direction', '')
-    raw_dur = call_obj.get('duration', 0)
-    call_duration = round(int(raw_dur) / 60) if raw_dur else 0
-    created_at = call_obj.get('started_at', '') or call_obj.get('created_at', '')
-    call_date = ''
-    if created_at:
-        try:
-            from dateutil import parser as dp
-            call_date = dp.parse(created_at).strftime('%d %b %Y, %I:%M %p')
-        except Exception:
-            call_date = str(created_at)[:19]
-
-    client_phone = call_obj.get('phone_number', '') or ''
-    contact = call_obj.get('contact', {}) or {}
-    client_name = (
-        contact.get('display_name', '') or contact.get('full_name', '')
-        or (f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip() if contact.get('first_name') else '')
-        or call_obj.get('company_name', '') or 'Unknown'
-    )
-
+    rep_email = ''
     rep_role = ''
     est_id = ''
-    if rep_name:
-        emp_result = call_mcp_tool('search_employees', {'query': rep_name})
-        if isinstance(emp_result, dict) and not emp_result.get('error'):
-            employees = []
-            inner = emp_result.get('result', emp_result)
-            if isinstance(inner, dict):
-                employees = inner.get('employees', inner.get('results', []))
-            elif isinstance(inner, list):
-                employees = inner
-            for emp in (employees if isinstance(employees, list) else []):
-                emp_email = emp.get('email', '') or emp.get('work_email', '')
-                if emp_email and rep_email and emp_email.lower() == rep_email.lower():
-                    title_raw = emp.get('title', '')
-                    est_match = re.match(r'(EST-\d+)\s*(.*)', title_raw)
-                    est_id = emp.get('employee_id', '') or emp.get('est_id', '') or (est_match.group(1) if est_match else '')
-                    rep_role = emp.get('role', '') or emp.get('job_title', '') or (est_match.group(2) if est_match else title_raw)
-                    fn = emp.get('full_name', '') or emp.get('name', '')
-                    if fn:
-                        rep_name = fn
-                    break
+    emp_result = call_mcp_tool('search_employees', {'query': rep_name})
+    if isinstance(emp_result, dict) and not emp_result.get('error'):
+        employees = []
+        inner = emp_result.get('result', emp_result)
+        if isinstance(inner, dict): employees = inner.get('employees', inner.get('results', []))
+        elif isinstance(inner, list): employees = inner
+        for emp in (employees if isinstance(employees, list) else []):
+            emp_name = emp.get('full_name', '') or emp.get('name', '')
+            if emp_name and rep_name.lower() in emp_name.lower():
+                title_raw = emp.get('title', '')
+                est_match = re.match(r'(EST-\d+)\s*(.*)', title_raw)
+                est_id = emp.get('employee_id', '') or emp.get('est_id', '') or (est_match.group(1) if est_match else '')
+                rep_role = emp.get('role', '') or emp.get('job_title', '') or (est_match.group(2) if est_match else title_raw)
+                rep_email = emp.get('email', '') or emp.get('work_email', '')
+                fn = emp.get('full_name', '') or emp.get('name', '')
+                if fn: rep_name = fn
+                break
 
     job_id = str(uuid.uuid4())[:8]
-    jobs[job_id] = {'status': 'running', 'message': 'Fetching call transcript...', 'result': None, 'error': None}
-
+    jobs[job_id] = {'status': 'running', 'message': 'AI is scoring the call...', 'result': None, 'error': None}
     pipeline_data = {
-        'call_id': call_id, 'rep_name': rep_name, 'rep_email': rep_email,
-        'rep_role': rep_role, 'est_id': est_id, 'call_date': call_date,
-        'call_direction': call_direction, 'call_duration': call_duration,
-        'client_name': client_name, 'client_phone': client_phone,
+        'rep_name': rep_name, 'rep_email': rep_email,
+        'rep_role': rep_role, 'est_id': est_id,
+        'call_date': datetime.now().strftime('%d %b %Y'),
+        'call_direction': '', 'call_duration': '',
+        'client_name': 'Unknown', 'client_phone': '',
+        'transcript_text': transcript,
     }
     thread = threading.Thread(target=run_review_pipeline, args=(job_id, pipeline_data), daemon=True)
     thread.start()
-
-    return jsonify({
-        'job_id': job_id, 'rep_name': rep_name, 'rep_email': rep_email,
-        'rep_role': rep_role, 'est_id': est_id, 'call_date': call_date,
-        'call_direction': call_direction, 'call_duration': call_duration,
-        'client_name': client_name, 'client_phone': client_phone,
-    })
+    return jsonify({'job_id': job_id, 'rep_name': rep_name, 'rep_email': rep_email, 'rep_role': rep_role, 'est_id': est_id})
 
 
 def run_review_pipeline(job_id: str, data: dict):
@@ -623,11 +608,13 @@ def run_review_pipeline(job_id: str, data: dict):
         client_phone = data.get('client_phone', '')
         direct_link = data.get('direct_link', '')
 
-        # Step 1: Fetch transcript + client lookup in parallel
-        transcript_text = ''
+        # Step 1: Get transcript (pre-provided or fetched from Aircall)
+        transcript_text = data.get('transcript_text', '')
         resolved_client = client_name
 
         def fetch_transcript():
+            if data.get('transcript_text'):
+                return {'result': {'transcript': data['transcript_text']}}
             result = call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
             # Fallback: if get_aircall_transcript fails, try search_aircall_transcripts
             if isinstance(result, dict):
