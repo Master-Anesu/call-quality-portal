@@ -667,7 +667,7 @@ Anesu"""
 
     email_args = {
         'from_user': SENDER_EMAIL,
-        'to': rep_email,
+        'to': [rep_email],
         'subject': subject,
         'body': body,
     }
