@@ -538,6 +538,7 @@ def run_review_pipeline(job_id: str, data: dict):
         call_duration = data.get('call_duration', '')
         client_name = data.get('client_name', 'Unknown')
         client_phone = data.get('client_phone', '')
+        direct_link = data.get('direct_link', '')
 
         # Step 1: Fetch transcript + client lookup in parallel
         transcript_text = ''
@@ -645,7 +646,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             jobs[job_id] = {'status': 'error', 'message': f"Document generation failed: {str(e)}", 'result': None, 'error': str(e)}
             return
 
-        call_link = f"https://app.aircall.io/calls/{call_id}"
+        call_link = direct_link or f"https://app.aircall.io/calls/{call_id}"
         review_data['call_link'] = call_link
         review_data['filepath'] = filepath
         review_data['filename'] = os.path.basename(filepath)
