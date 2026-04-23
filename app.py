@@ -540,6 +540,12 @@ def start_review_from_link():
 
     call_data = call_result.get('result', call_result)
     call_obj = call_data.get('call', call_data) if isinstance(call_data, dict) else {}
+
+    # Check if call has a transcript
+    has_transcript = call_obj.get('has_transcript')
+    if has_transcript is False or has_transcript == 'false':
+        return jsonify({'error': 'This call does not have a transcript available in Aircall. Only calls with transcripts can be reviewed.'}), 400
+
     user_info = call_obj.get('user', {}) if isinstance(call_obj, dict) else {}
     rep_name = user_info.get('name', '').replace(' - SR', '').replace(' - CSR', '').strip()
     rep_email = user_info.get('email', '')
