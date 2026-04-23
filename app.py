@@ -646,7 +646,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             jobs[job_id] = {'status': 'error', 'message': f"Document generation failed: {str(e)}", 'result': None, 'error': str(e)}
             return
 
-        call_link = direct_link or f"https://app.aircall.io/calls/{call_id}"
+        call_link = f"https://assets.aircall.io/calls/{call_id}/recording"
         review_data['call_link'] = call_link
         review_data['filepath'] = filepath
         review_data['filename'] = os.path.basename(filepath)
