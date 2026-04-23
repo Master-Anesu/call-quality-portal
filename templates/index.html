@@ -1109,17 +1109,15 @@
         goToStep(4);
         const d = state.reviewData;
         const firstName = d.rep_name?.split(' ')[0] || '';
-        const monthYear = new Date().toLocaleString('en-AU', { month: 'long', year: 'numeric' });
+        const clientDisplay = d.client_name || 'a client';
 
         document.getElementById('email-to').textContent = d.rep_email || 'No email found';
-        document.getElementById('email-subject').textContent = `Call Quality Review — ${monthYear}`;
+        document.getElementById('email-subject').textContent = `Call Quality Review — ${clientDisplay} — ${d.call_date || ''}`;
         document.getElementById('email-attachment').textContent = d.filename || '(no document available)';
         document.getElementById('email-body').textContent =
 `Hi ${firstName},
 
-Please find attached your call quality review.
-
-The review is based on your call with ${d.client_name || 'a client'} on ${d.call_date || ''}:
+Please find attached your call quality review for your call with ${clientDisplay} on ${d.call_date || ''}:
 ${d.call_link || ''}
 
 Have a read through and let me know if you'd like to chat about anything in the review.

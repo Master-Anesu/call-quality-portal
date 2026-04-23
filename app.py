@@ -115,6 +115,7 @@ Core question for every dimension: "Did this part of the conversation make the c
 
 Return your response as valid JSON with this exact structure:
 {
+  "client_name": "the client/caller's full name as identified from the transcript",
   "call_story": "2-3 sentence narrative of who called, why, what happened, how it ended",
   "outcome": "brief outcome description",
   "highlights": ["5-8 specific moments where the rep's conversation skills made a difference"],
@@ -609,6 +610,11 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             jobs[job_id] = {'status': 'error', 'message': 'LLM returned invalid or incomplete JSON. Please retry.', 'result': None, 'error': 'Invalid JSON from LLM'}
             return
 
+        # Use LLM-identified client name if still Unknown
+        llm_client = review_json.get('client_name', '')
+        if (not resolved_client or resolved_client == 'Unknown') and llm_client:
+            resolved_client = llm_client
+
         # Step 3: Generate Word doc
         jobs[job_id]['message'] = 'Generating Word document...'
 
@@ -665,17 +671,14 @@ def send_email_route():
     call_link = data.get('call_link', '')
     filepath = data.get('filepath', '')
     filename = data.get('filename', '')
-    month_year = datetime.now().strftime('%B %Y')
 
     if not rep_email:
         return jsonify({'error': 'No recipient email address provided.'}), 400
 
-    subject = f"Call Quality Review \u2014 {month_year}"
+    subject = f"Call Quality Review \u2014 {client_name} \u2014 {call_date}"
     body_text = f"""Hi {first_name},
 
-Please find attached your call quality review for this month.
-
-The review is based on your call with {client_name} on {call_date}:
+Please find attached your call quality review for your call with {client_name} on {call_date}:
 {call_link}
 
 Have a read through and let me know if you'd like to chat about anything in the review.
