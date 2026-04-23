@@ -585,11 +585,13 @@ def run_review_pipeline(job_id: str, data: dict):
 
         scoring_prompt = f"""Score this call quality review.
 
-REP: {rep_name} ({rep_role})
+REP (the Trilogy Care employee being reviewed): {rep_name} ({rep_role})
+CLIENT (the external caller/recipient): {resolved_client}
 CALL DATE: {call_date}
 DIRECTION: {call_direction}
 DURATION: {call_duration} minutes
-CLIENT: {resolved_client}
+
+IMPORTANT: In the transcript below, [agent] is ALWAYS {rep_name} (the rep being reviewed). [external] is ALWAYS the client/caller. Do NOT confuse these roles. When writing your review, refer to {rep_name} as the rep and {resolved_client} as the client.
 
 TRANSCRIPT:
 {transcript_text[:12000]}
@@ -768,13 +770,32 @@ def get_graph_token():
 
 
 def extract_client_name(raw: str) -> str:
-    """Try to extract a client name from search results."""
+    """Try to extract a client name from search results (various MCP response shapes)."""
     try:
         data = json.loads(raw)
-        if isinstance(data, list) and data:
-            return data[0].get('name', '') or data[0].get('full_name', '')
+        # Unwrap nested MCP response: {result: {customers: [...]}} or {result: [...]}
         if isinstance(data, dict):
-            return data.get('name', '') or data.get('full_name', '')
+            inner = data.get('result', data)
+            if isinstance(inner, dict):
+                # {result: {customers: [...]}} or {customers: [...]}
+                for key in ('customers', 'contacts', 'results', 'data'):
+                    if isinstance(inner.get(key), list) and inner[key]:
+                        inner = inner[key]
+                        break
+            if isinstance(inner, list) and inner:
+                item = inner[0]
+                return (item.get('display_name', '') or item.get('full_name', '')
+                        or item.get('name', '')
+                        or f"{item.get('first_name', '')} {item.get('last_name', '')}".strip())
+            if isinstance(inner, dict):
+                return (inner.get('display_name', '') or inner.get('full_name', '')
+                        or inner.get('name', '')
+                        or f"{inner.get('first_name', '')} {inner.get('last_name', '')}".strip())
+        if isinstance(data, list) and data:
+            item = data[0]
+            return (item.get('display_name', '') or item.get('full_name', '')
+                    or item.get('name', '')
+                    or f"{item.get('first_name', '')} {item.get('last_name', '')}".strip())
     except Exception:
         pass
     return ''
