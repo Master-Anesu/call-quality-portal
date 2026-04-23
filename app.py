@@ -10,6 +10,7 @@ import json
 import re
 import uuid
 import base64
+import logging
 import threading
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,9 @@ from flask import Flask, render_template, jsonify, request, send_from_directory
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '.brain', 'common_functions'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '.brain', 'templates', 'branded', 'base'))
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['OUTPUT_DIR'] = os.path.join(os.path.dirname(__file__), 'output')
@@ -635,22 +639,11 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
         review_data['filename'] = os.path.basename(filepath)
 
         # Upload document as artifact so send_email can attach it
-        artifact_id = None
-        if filepath and os.path.isfile(filepath):
-            try:
-                with open(filepath, 'rb') as f:
-                    file_bytes = f.read()
-                artifact_result = call_mcp_tool('save_artifact', {
-                    'title': os.path.basename(filepath),
-                    'filename': os.path.basename(filepath),
-                    'content': base64.b64encode(file_bytes).decode('utf-8'),
-                    'is_base64': True,
-                    'description': f"Call quality review for {data.get('rep_name', '')}",
-                })
-                if isinstance(artifact_result, dict) and not artifact_result.get('error'):
-                    artifact_id = artifact_result.get('artifact_id') or artifact_result.get('id')
-            except Exception:
-                pass
+        artifact_id = upload_artifact(filepath, f"Call quality review for {data.get('rep_name', '')}")
+        if artifact_id:
+            logger.info('Pipeline artifact upload succeeded: %s', artifact_id)
+        else:
+            logger.warning('Pipeline artifact upload returned no artifact_id')
         review_data['artifact_id'] = artifact_id
 
         jobs[job_id] = {'status': 'complete', 'message': 'Review complete!', 'result': review_data, 'error': None}
@@ -670,10 +663,21 @@ def send_email_route():
     call_date = data.get('call_date', '')
     call_link = data.get('call_link', '')
     artifact_id = data.get('artifact_id')
+    filepath = data.get('filepath', '')
+    filename = data.get('filename', '')
     month_year = datetime.now().strftime('%B %Y')
 
     if not rep_email:
         return jsonify({'error': 'No recipient email address provided.'}), 400
+
+    # If no artifact_id from pipeline, retry upload now
+    if not artifact_id and filepath:
+        logger.info('No artifact_id from pipeline — retrying save_artifact for %s', filepath)
+        artifact_id = upload_artifact(filepath, f"Call quality review for {rep_name}")
+        if artifact_id:
+            logger.info('Retry succeeded — artifact_id: %s', artifact_id)
+        else:
+            logger.warning('Retry also returned no artifact_id')
 
     subject = f"Call Quality Review — {month_year}"
     body = f"""Hi {first_name},
@@ -698,13 +702,22 @@ Anesu"""
 
     if artifact_id:
         email_args['artifact_ids'] = [artifact_id]
+        logger.info('Sending email with artifact_id: %s', artifact_id)
+    else:
+        logger.warning('Sending email WITHOUT attachment — no artifact_id available')
 
     try:
         result = call_mcp_tool('send_email', email_args)
+        logger.info('send_email response: %s', json.dumps(result, default=str)[:500])
         if isinstance(result, dict) and result.get('error'):
             return jsonify({'error': result['error']}), 500
-        return jsonify({'success': True, 'result': result})
+        return jsonify({
+            'success': True,
+            'result': result,
+            'attachment_included': bool(artifact_id),
+        })
     except Exception as e:
+        logger.error('send_email failed: %s', e)
         return jsonify({'error': str(e)}), 500
 
 
@@ -717,6 +730,62 @@ def download_file(filename):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def upload_artifact(filepath, description=''):
+    """Upload a file via save_artifact MCP tool. Returns artifact_id or None."""
+    if not filepath or not os.path.isfile(filepath):
+        logger.warning('upload_artifact: file not found at %s', filepath)
+        return None
+    try:
+        with open(filepath, 'rb') as f:
+            file_bytes = f.read()
+        filename = os.path.basename(filepath)
+        result = call_mcp_tool('save_artifact', {
+            'title': filename,
+            'filename': filename,
+            'content': base64.b64encode(file_bytes).decode('utf-8'),
+            'is_base64': True,
+            'description': description or f'Uploaded file: {filename}',
+        })
+        logger.info('save_artifact response for %s: %s', filename, json.dumps(result, default=str)[:500])
+        return _extract_artifact_id(result)
+    except Exception as e:
+        logger.error('upload_artifact failed for %s: %s', filepath, e)
+        return None
+
+
+def _extract_artifact_id(result):
+    """Extract artifact_id from various MCP response shapes."""
+    if not isinstance(result, dict) or result.get('error'):
+        return None
+    for key in ('artifact_id', 'id', 'artifactId'):
+        if result.get(key):
+            return str(result[key])
+    inner = result.get('result', {})
+    if isinstance(inner, dict):
+        for key in ('artifact_id', 'id', 'artifactId'):
+            if inner.get(key):
+                return str(inner[key])
+    for block in (result.get('content') or []):
+        if isinstance(block, dict) and block.get('type') == 'text':
+            try:
+                parsed = json.loads(block['text'])
+                for key in ('artifact_id', 'id', 'artifactId'):
+                    if isinstance(parsed, dict) and parsed.get(key):
+                        return str(parsed[key])
+            except Exception:
+                pass
+    raw = result.get('raw', '')
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            for key in ('artifact_id', 'id', 'artifactId'):
+                if isinstance(parsed, dict) and parsed.get(key):
+                    return str(parsed[key])
+        except Exception:
+            pass
+    return None
+
 
 def extract_client_name(raw: str) -> str:
     """Try to extract a client name from search results."""
