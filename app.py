@@ -44,6 +44,10 @@ AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
 AZURE_OPENAI_DEPLOYMENT = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", "trilogy-gpt-4.1")
 
+AZURE_AD_TENANT_ID = os.environ.get("AZURE_AD_TENANT_ID", "")
+AZURE_AD_CLIENT_ID = os.environ.get("AZURE_AD_CLIENT_ID", "")
+AZURE_AD_CLIENT_SECRET = os.environ.get("AZURE_AD_CLIENT_SECRET", "")
+
 
 # ---------------------------------------------------------------------------
 # MCP Tool Caller
@@ -638,13 +642,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
         review_data['filepath'] = filepath
         review_data['filename'] = os.path.basename(filepath)
 
-        # Upload document as artifact so send_email can attach it
-        artifact_id = upload_artifact(filepath, f"Call quality review for {data.get('rep_name', '')}")
-        if artifact_id:
-            logger.info('Pipeline artifact upload succeeded: %s', artifact_id)
-        else:
-            logger.warning('Pipeline artifact upload returned no artifact_id')
-        review_data['artifact_id'] = artifact_id
+        # Document ready — attachment will be sent inline via MS Graph at email time
 
         jobs[job_id] = {'status': 'complete', 'message': 'Review complete!', 'result': review_data, 'error': None}
 
@@ -654,7 +652,8 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
 
 @app.route('/api/send-email', methods=['POST'])
 def send_email_route():
-    """Send the review document via email using send_email MCP tool with artifact attachment."""
+    """Send the review document via email with .docx attachment using Microsoft Graph."""
+    import requests as req_lib
     data = request.json
     rep_email = data.get('rep_email', '')
     rep_name = data.get('rep_name', '')
@@ -662,7 +661,6 @@ def send_email_route():
     client_name = data.get('client_name', '')
     call_date = data.get('call_date', '')
     call_link = data.get('call_link', '')
-    artifact_id = data.get('artifact_id')
     filepath = data.get('filepath', '')
     filename = data.get('filename', '')
     month_year = datetime.now().strftime('%B %Y')
@@ -670,17 +668,8 @@ def send_email_route():
     if not rep_email:
         return jsonify({'error': 'No recipient email address provided.'}), 400
 
-    # If no artifact_id from pipeline, retry upload now
-    if not artifact_id and filepath:
-        logger.info('No artifact_id from pipeline — retrying save_artifact for %s', filepath)
-        artifact_id = upload_artifact(filepath, f"Call quality review for {rep_name}")
-        if artifact_id:
-            logger.info('Retry succeeded — artifact_id: %s', artifact_id)
-        else:
-            logger.warning('Retry also returned no artifact_id')
-
-    subject = f"Call Quality Review — {month_year}"
-    body = f"""Hi {first_name},
+    subject = f"Call Quality Review \u2014 {month_year}"
+    body_text = f"""Hi {first_name},
 
 Please find attached your call quality review for this month.
 
@@ -692,30 +681,53 @@ Have a read through and let me know if you'd like to chat about anything in the 
 Kind regards,
 Anesu"""
 
-    email_args = {
-        'from_user': SENDER_EMAIL,
-        'to': [rep_email],
-        'subject': subject,
-        'body': body,
-        'body_type': 'text',
+    # Build Microsoft Graph sendMail payload with inline attachment
+    mail_payload = {
+        'message': {
+            'subject': subject,
+            'body': {'contentType': 'Text', 'content': body_text},
+            'from': {'emailAddress': {'address': SENDER_EMAIL}},
+            'toRecipients': [{'emailAddress': {'address': rep_email}}],
+        },
+        'saveToSentItems': True,
     }
 
-    if artifact_id:
-        email_args['artifact_ids'] = [artifact_id]
-        logger.info('Sending email with artifact_id: %s', artifact_id)
-    else:
-        logger.warning('Sending email WITHOUT attachment — no artifact_id available')
+    # Attach the Word document if available on disk
+    attachment_ok = False
+    if filepath and os.path.isfile(filepath):
+        try:
+            with open(filepath, 'rb') as f:
+                file_bytes = f.read()
+            mail_payload['message']['attachments'] = [{
+                '@odata.type': '#microsoft.graph.fileAttachment',
+                'name': filename or os.path.basename(filepath),
+                'contentBytes': base64.b64encode(file_bytes).decode('utf-8'),
+                'contentType': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            }]
+            attachment_ok = True
+            logger.info('Attached %s (%d bytes)', filename, len(file_bytes))
+        except Exception as e:
+            logger.error('Failed to read file for attachment: %s', e)
 
     try:
-        result = call_mcp_tool('send_email', email_args)
-        logger.info('send_email response: %s', json.dumps(result, default=str)[:500])
-        if isinstance(result, dict) and result.get('error'):
-            return jsonify({'error': result['error']}), 500
-        return jsonify({
-            'success': True,
-            'result': result,
-            'attachment_included': bool(artifact_id),
-        })
+        # Get Azure AD token
+        token = get_graph_token()
+        if not token:
+            return jsonify({'error': 'Failed to get Microsoft Graph token'}), 500
+
+        resp = req_lib.post(
+            f'https://graph.microsoft.com/v1.0/users/{SENDER_EMAIL}/sendMail',
+            json=mail_payload,
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            timeout=30,
+        )
+        logger.info('Graph sendMail status: %s', resp.status_code)
+        if resp.status_code == 202:
+            return jsonify({'success': True, 'attachment_included': attachment_ok})
+        else:
+            error_text = resp.text[:500]
+            logger.error('Graph sendMail failed: %s %s', resp.status_code, error_text)
+            return jsonify({'error': f'Microsoft Graph error: {resp.status_code}'}), 500
     except Exception as e:
         logger.error('send_email failed: %s', e)
         return jsonify({'error': str(e)}), 500
@@ -731,60 +743,28 @@ def download_file(filename):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def upload_artifact(filepath, description=''):
-    """Upload a file via save_artifact MCP tool. Returns artifact_id or None."""
-    if not filepath or not os.path.isfile(filepath):
-        logger.warning('upload_artifact: file not found at %s', filepath)
+def get_graph_token():
+    """Get a Microsoft Graph API access token via Azure AD client credentials."""
+    import requests as req_lib
+    if not all([AZURE_AD_TENANT_ID, AZURE_AD_CLIENT_ID, AZURE_AD_CLIENT_SECRET]):
+        logger.error('Azure AD credentials not configured')
         return None
     try:
-        with open(filepath, 'rb') as f:
-            file_bytes = f.read()
-        filename = os.path.basename(filepath)
-        result = call_mcp_tool('save_artifact', {
-            'title': filename,
-            'filename': filename,
-            'content': base64.b64encode(file_bytes).decode('utf-8'),
-            'is_base64': True,
-            'description': description or f'Uploaded file: {filename}',
-        })
-        logger.info('save_artifact response for %s: %s', filename, json.dumps(result, default=str)[:500])
-        return _extract_artifact_id(result)
+        resp = req_lib.post(
+            f'https://login.microsoftonline.com/{AZURE_AD_TENANT_ID}/oauth2/v2.0/token',
+            data={
+                'grant_type': 'client_credentials',
+                'client_id': AZURE_AD_CLIENT_ID,
+                'client_secret': AZURE_AD_CLIENT_SECRET,
+                'scope': 'https://graph.microsoft.com/.default',
+            },
+            timeout=10,
+        )
+        data = resp.json()
+        return data.get('access_token')
     except Exception as e:
-        logger.error('upload_artifact failed for %s: %s', filepath, e)
+        logger.error('Failed to get Graph token: %s', e)
         return None
-
-
-def _extract_artifact_id(result):
-    """Extract artifact_id from various MCP response shapes."""
-    if not isinstance(result, dict) or result.get('error'):
-        return None
-    for key in ('artifact_id', 'id', 'artifactId'):
-        if result.get(key):
-            return str(result[key])
-    inner = result.get('result', {})
-    if isinstance(inner, dict):
-        for key in ('artifact_id', 'id', 'artifactId'):
-            if inner.get(key):
-                return str(inner[key])
-    for block in (result.get('content') or []):
-        if isinstance(block, dict) and block.get('type') == 'text':
-            try:
-                parsed = json.loads(block['text'])
-                for key in ('artifact_id', 'id', 'artifactId'):
-                    if isinstance(parsed, dict) and parsed.get(key):
-                        return str(parsed[key])
-            except Exception:
-                pass
-    raw = result.get('raw', '')
-    if raw:
-        try:
-            parsed = json.loads(raw)
-            for key in ('artifact_id', 'id', 'artifactId'):
-                if isinstance(parsed, dict) and parsed.get(key):
-                    return str(parsed[key])
-        except Exception:
-            pass
-    return None
 
 
 def extract_client_name(raw: str) -> str:

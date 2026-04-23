@@ -1113,7 +1113,7 @@
 
         document.getElementById('email-to').textContent = d.rep_email || 'No email found';
         document.getElementById('email-subject').textContent = `Call Quality Review — ${monthYear}`;
-        document.getElementById('email-attachment').textContent = d.filename || '';
+        document.getElementById('email-attachment').textContent = d.filename || '(no document available)';
         document.getElementById('email-body').textContent =
 `Hi ${firstName},
 
@@ -1149,7 +1149,6 @@ Anesu`;
                     call_link: d.call_link,
                     filename: d.filename,
                     filepath: d.filepath,
-                    artifact_id: d.artifact_id || null,
                 }),
             });
             const result = await res.json();
@@ -1164,8 +1163,11 @@ Anesu`;
             // Show confirmation
             document.getElementById('email-preview-content').classList.remove('visible');
             document.getElementById('sent-confirmation').classList.add('visible');
+            const docNote = result.attachment_included
+                ? 'with document attached'
+                : '(document could not be attached)';
             document.getElementById('sent-detail').textContent =
-                `Review sent to ${d.rep_email} with call link and document attached.`;
+                `Review sent to ${d.rep_email} ${docNote}.`;
         } catch(err) {
             alert('Send failed: ' + err.message);
         } finally {

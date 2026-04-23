@@ -18,5 +18,11 @@ services:
         value: "2025-01-01-preview"
       - key: AZURE_OPENAI_DEPLOYMENT_NAME
         value: "trilogy-gpt-4.1"
+      - key: AZURE_AD_TENANT_ID
+        sync: false
+      - key: AZURE_AD_CLIENT_ID
+        sync: false
+      - key: AZURE_AD_CLIENT_SECRET
+        sync: false
       - key: PYTHON_VERSION
         value: "3.11.11"
