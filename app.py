@@ -668,10 +668,10 @@ Kind regards,
 Anesu"""
 
     email_args = {
-        'from_user': SENDER_EMAIL,
-        'to': [rep_email],
+        'type': 'email',
+        'recipients': [{'email': rep_email}],
         'subject': subject,
-        'body': body,
+        'content': body,
     }
 
     if filepath and os.path.isfile(filepath):
@@ -679,20 +679,18 @@ Anesu"""
             with open(filepath, 'rb') as f:
                 file_bytes = f.read()
             email_args['attachments'] = [{
+                '@odata.type': '#microsoft.graph.fileAttachment',
                 'name': filename or os.path.basename(filepath),
-                'content_bytes': base64.b64encode(file_bytes).decode('utf-8'),
-                'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'contentBytes': base64.b64encode(file_bytes).decode('utf-8'),
+                'contentType': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             }]
         except Exception:
             pass
 
     try:
-        result = call_mcp_tool('send_email', email_args)
+        result = call_mcp_tool('graph_messaging', email_args)
         if isinstance(result, dict) and result.get('error'):
             return jsonify({'error': result['error']}), 500
-        inner = result.get('result', {}) if isinstance(result, dict) else {}
-        if isinstance(inner, dict) and inner.get('error'):
-            return jsonify({'error': inner['error']}), 500
         return jsonify({'success': True, 'result': result})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
