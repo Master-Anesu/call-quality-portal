@@ -9,6 +9,7 @@ import sys
 import json
 import re
 import uuid
+import base64
 import threading
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -58,7 +59,11 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
         resp.raise_for_status()
         if not resp.text.strip():
             return {"success": True}
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError:
+            # HTTP 2xx but non-JSON body — the operation succeeded
+            return {"success": True, "raw": resp.text[:500]}
     except Exception as e:
         return {"error": str(e)}
 
@@ -629,6 +634,25 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
         review_data['filepath'] = filepath
         review_data['filename'] = os.path.basename(filepath)
 
+        # Upload document as artifact so send_email can attach it
+        artifact_id = None
+        if filepath and os.path.isfile(filepath):
+            try:
+                with open(filepath, 'rb') as f:
+                    file_bytes = f.read()
+                artifact_result = call_mcp_tool('save_artifact', {
+                    'title': os.path.basename(filepath),
+                    'filename': os.path.basename(filepath),
+                    'content': base64.b64encode(file_bytes).decode('utf-8'),
+                    'is_base64': True,
+                    'description': f"Call quality review for {data.get('rep_name', '')}",
+                })
+                if isinstance(artifact_result, dict) and not artifact_result.get('error'):
+                    artifact_id = artifact_result.get('artifact_id') or artifact_result.get('id')
+            except Exception:
+                pass
+        review_data['artifact_id'] = artifact_id
+
         jobs[job_id] = {'status': 'complete', 'message': 'Review complete!', 'result': review_data, 'error': None}
 
     except Exception as e:
@@ -637,9 +661,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
 
 @app.route('/api/send-email', methods=['POST'])
 def send_email_route():
-    """Send the review document via email."""
-    import base64
-
+    """Send the review document via email using send_email MCP tool with artifact attachment."""
     data = request.json
     rep_email = data.get('rep_email', '')
     rep_name = data.get('rep_name', '')
@@ -647,8 +669,7 @@ def send_email_route():
     client_name = data.get('client_name', '')
     call_date = data.get('call_date', '')
     call_link = data.get('call_link', '')
-    filename = data.get('filename', '')
-    filepath = data.get('filepath', '')
+    artifact_id = data.get('artifact_id')
     month_year = datetime.now().strftime('%B %Y')
 
     if not rep_email:
@@ -668,27 +689,18 @@ Kind regards,
 Anesu"""
 
     email_args = {
-        'type': 'email',
-        'recipients': [{'email': rep_email}],
+        'from_user': SENDER_EMAIL,
+        'to': [rep_email],
         'subject': subject,
-        'content': body,
+        'body': body,
+        'body_type': 'text',
     }
 
-    if filepath and os.path.isfile(filepath):
-        try:
-            with open(filepath, 'rb') as f:
-                file_bytes = f.read()
-            email_args['attachments'] = [{
-                '@odata.type': '#microsoft.graph.fileAttachment',
-                'name': filename or os.path.basename(filepath),
-                'contentBytes': base64.b64encode(file_bytes).decode('utf-8'),
-                'contentType': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            }]
-        except Exception:
-            pass
+    if artifact_id:
+        email_args['artifact_ids'] = [artifact_id]
 
     try:
-        result = call_mcp_tool('graph_messaging', email_args)
+        result = call_mcp_tool('send_email', email_args)
         if isinstance(result, dict) and result.get('error'):
             return jsonify({'error': result['error']}), 500
         return jsonify({'success': True, 'result': result})
