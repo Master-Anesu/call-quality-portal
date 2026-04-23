@@ -7,30 +7,33 @@ Uses background jobs + polling instead of SSE to avoid Render request timeouts.
 import os
 import sys
 import json
-import subprocess
-import time
 import re
 import uuid
 import threading
 from datetime import datetime, timedelta
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
-from flask import Flask, render_template, jsonify, request, Response
+from flask import Flask, render_template, jsonify, request, send_from_directory
 
-# Add common functions to path for TC doc helpers
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '.brain', 'common_functions'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '.brain', 'templates', 'branded', 'base'))
 
 app = Flask(__name__)
 app.config['OUTPUT_DIR'] = os.path.join(os.path.dirname(__file__), 'output')
 
+# ---------------------------------------------------------------------------
+# In-memory job store  (single-worker gunicorn, so this is safe)
+# ---------------------------------------------------------------------------
+jobs = {}
+
+# ---------------------------------------------------------------------------
+# Config from env vars
+# ---------------------------------------------------------------------------
 MCP_BASE_URL = "https://llm-alb.trilogycare.com.au/mcp/tools"
 MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 WORKSPACE_USER_ID = os.environ.get("WORKSPACE_USER_ID", "")
 SENDER_EMAIL = "anesut@trilogycare.com.au"
 
-# Azure OpenAI config
 AZURE_OPENAI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY", "")
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2025-01-01-preview")
@@ -59,7 +62,7 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Azure OpenAI
+# Azure OpenAI  (non-streaming — background thread handles the wait)
 # ---------------------------------------------------------------------------
 
 def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> str:
@@ -85,7 +88,7 @@ def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> st
 
 
 # ---------------------------------------------------------------------------
-# Scoring prompt (from call-quality-review-template.md)
+# Scoring prompt
 # ---------------------------------------------------------------------------
 
 SCORING_SYSTEM_PROMPT = """You are a call quality reviewer for Trilogy Care, an Australian aged care provider.
@@ -135,22 +138,20 @@ A+ = 90-100%, A = 80-89%, B = 70-79%, C = 60-69%, D = below 60%
 def generate_word_doc(review_data: dict) -> str:
     """Generate a branded TC Word document from review data. Returns file path."""
     from docx import Document
-    from docx.shared import Pt, Inches, RGBColor
+    from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.oxml.ns import qn
 
-    # Colors
     NAVY = RGBColor(0x2C, 0x4C, 0x79)
     TEAL = RGBColor(0x43, 0xC0, 0xBE)
     DARK_TEAL = RGBColor(0x00, 0x7F, 0x7E)
     WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-    RED = RGBColor(0xE0, 0x4B, 0x51)
     BLACK = RGBColor(0x33, 0x33, 0x33)
 
     doc = Document()
 
-    # --- Cover page ---
+    # Cover page
     for _ in range(4):
         doc.add_paragraph('')
     title_para = doc.add_paragraph()
@@ -178,9 +179,8 @@ def generate_word_doc(review_data: dict) -> str:
 
     doc.add_page_break()
 
-    # --- Header Block ---
+    # Header block
     today_str = datetime.now().strftime('%d %B %Y')
-
     header_data = [
         ['Agent', f"{review_data['rep_name']} — {review_data.get('est_id', '')} {review_data['rep_role']}"],
         ['Department', 'CSR'],
@@ -206,18 +206,15 @@ def generate_word_doc(review_data: dict) -> str:
         run_v.font.size = Pt(11)
         run_v.font.name = 'Aptos'
         run_v.font.color.rgb = BLACK
-        # Navy background for label column
         shading = cell_label._element.get_or_add_tcPr()
         shading_elem = shading.makeelement(qn('w:shd'), {
-            qn('w:val'): 'clear',
-            qn('w:color'): 'auto',
-            qn('w:fill'): 'E8EDF3',
+            qn('w:val'): 'clear', qn('w:color'): 'auto', qn('w:fill'): 'E8EDF3',
         })
         shading.append(shading_elem)
 
     doc.add_paragraph('')
 
-    # --- Section 1: Call Overview ---
+    # Call overview with score
     scores = review_data.get('scores', {})
     total_points = scores.get('rapport', {}).get('score', 0) * 2
     for dim in ['opening', 'reading_the_room', 'discovery', 'making_value_real', 'navigating_resistance', 'guiding_to_action', 'confidence_knowledge']:
@@ -245,26 +242,24 @@ def generate_word_doc(review_data: dict) -> str:
         run.font.name = 'Aptos'
         run.font.size = Pt(11)
 
-    # --- Section 2: What Worked ---
+    # Highlights
     h2 = doc.add_heading('What Worked — Conversation Highlights', level=2)
     for run in h2.runs:
         run.font.color.rgb = NAVY
-
     for highlight in review_data.get('highlights', []):
         p = doc.add_paragraph(highlight, style='List Bullet')
         for run in p.runs:
             run.font.name = 'Aptos'
             run.font.size = Pt(11)
 
-    # --- Section 3: Where to Level Up ---
+    # Growth opportunities
     h2 = doc.add_heading('Where to Level Up — Growth Opportunities', level=2)
     for run in h2.runs:
         run.font.color.rgb = NAVY
-
     for opp in review_data.get('growth_opportunities', []):
         if isinstance(opp, dict):
             p = doc.add_paragraph('', style='List Bullet')
-            run_moment = p.add_run(f"The moment: ")
+            run_moment = p.add_run('The moment: ')
             run_moment.bold = True
             run_moment.font.name = 'Aptos'
             run_moment.font.size = Pt(11)
@@ -274,7 +269,7 @@ def generate_word_doc(review_data: dict) -> str:
             run_text.font.size = Pt(11)
 
             p2 = doc.add_paragraph('', style='List Bullet 2')
-            run_opp = p2.add_run(f"The opportunity: ")
+            run_opp = p2.add_run('The opportunity: ')
             run_opp.bold = True
             run_opp.font.name = 'Aptos'
             run_opp.font.size = Pt(11)
@@ -284,7 +279,7 @@ def generate_word_doc(review_data: dict) -> str:
             run_text2.font.size = Pt(11)
 
             p3 = doc.add_paragraph('', style='List Bullet 2')
-            run_why = p3.add_run(f"Why it matters: ")
+            run_why = p3.add_run('Why it matters: ')
             run_why.bold = True
             run_why.font.name = 'Aptos'
             run_why.font.size = Pt(11)
@@ -292,14 +287,13 @@ def generate_word_doc(review_data: dict) -> str:
             run_text3.font.name = 'Aptos'
             run_text3.font.size = Pt(11)
         else:
-            p = doc.add_paragraph(str(opp), style='List Bullet')
+            doc.add_paragraph(str(opp), style='List Bullet')
 
-    # --- Section 4: Overall Assessment ---
+    # Score table
     h2 = doc.add_heading('Overall Assessment', level=2)
     for run in h2.runs:
         run.font.color.rgb = NAVY
 
-    # Score table
     dim_labels = {
         'rapport': ('Rapport & Human Connection', '2x'),
         'opening': ('Opening & Setting the Scene', '1x'),
@@ -315,7 +309,6 @@ def generate_word_doc(review_data: dict) -> str:
     score_table.style = 'Table Grid'
     score_table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-    # Header row
     headers = ['#', 'Dimension', 'Score', 'Weighted']
     for j, h_text in enumerate(headers):
         cell = score_table.cell(0, j)
@@ -345,7 +338,6 @@ def generate_word_doc(review_data: dict) -> str:
             run = row[j].paragraphs[0].add_run(val)
             run.font.size = Pt(10)
             run.font.name = 'Aptos'
-            # Alternate row shading
             if i % 2 == 0:
                 shading = row[j]._element.get_or_add_tcPr()
                 shading_elem = shading.makeelement(qn('w:shd'), {
@@ -408,7 +400,7 @@ def generate_word_doc(review_data: dict) -> str:
         for run in p.runs:
             run.font.name = 'Aptos'
 
-    # --- Footer ---
+    # Footer
     doc.add_paragraph('')
     doc.add_paragraph('_' * 60)
     footer_items = [
@@ -454,13 +446,18 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/api/health')
+def health():
+    """Health check — useful for verifying the app started correctly."""
+    return jsonify({'status': 'ok', 'jobs_store': len(jobs)})
+
+
 @app.route('/api/search-employee', methods=['POST'])
 def search_employee():
     """Search for an employee by name."""
     name = request.json.get('name', '').strip()
     if not name:
         return jsonify({'error': 'Name is required'}), 400
-
     result = call_mcp_tool('search_employees', {'query': name})
     return jsonify(result)
 
@@ -490,7 +487,12 @@ def start_review():
     """Kick off the review pipeline in a background thread. Returns a job_id for polling."""
     data = request.json
     job_id = str(uuid.uuid4())[:8]
-    jobs[job_id] = {'status': 'running', 'message': 'Fetching call transcript...', 'result': None, 'error': None}
+    jobs[job_id] = {
+        'status': 'running',
+        'message': 'Fetching call transcript...',
+        'result': None,
+        'error': None,
+    }
 
     thread = threading.Thread(target=run_review_pipeline, args=(job_id, data), daemon=True)
     thread.start()
@@ -521,7 +523,7 @@ def run_review_pipeline(job_id: str, data: dict):
         client_name = data.get('client_name', 'Unknown')
         client_phone = data.get('client_phone', '')
 
-        # Step 1: Fetch transcript + client lookup IN PARALLEL
+        # Step 1: Fetch transcript + client lookup in parallel
         transcript_text = ''
         resolved_client = client_name
 
@@ -563,7 +565,7 @@ def run_review_pipeline(job_id: str, data: dict):
                 raw = client_result.get('raw', '') or json.dumps(client_result)
                 resolved_client = extract_client_name(raw) or client_name
 
-        # Step 2: Score with LLM (non-streaming — no connection to keep alive)
+        # Step 2: Score with LLM
         jobs[job_id]['message'] = 'AI is scoring the call across 8 dimensions...'
 
         scoring_prompt = f"""Score this call quality review.
@@ -590,7 +592,7 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             jobs[job_id] = {'status': 'error', 'message': 'LLM returned invalid or incomplete JSON. Please retry.', 'result': None, 'error': 'Invalid JSON from LLM'}
             return
 
-        # Step 3: Build review data and generate Word doc
+        # Step 3: Generate Word doc
         jobs[job_id]['message'] = 'Generating Word document...'
 
         review_data = {
@@ -670,7 +672,6 @@ Anesu"""
         'body': body,
     }
 
-    # Attach the .docx if it exists on disk
     if filepath and os.path.isfile(filepath):
         try:
             with open(filepath, 'rb') as f:
@@ -681,14 +682,12 @@ Anesu"""
                 'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             }]
         except Exception:
-            pass  # Send without attachment if file read fails
+            pass
 
     try:
         result = call_mcp_tool('send_email', email_args)
-        # Check if MCP returned an error in the response
         if isinstance(result, dict) and result.get('error'):
             return jsonify({'error': result['error']}), 500
-        # Also check nested result for errors
         inner = result.get('result', {}) if isinstance(result, dict) else {}
         if isinstance(inner, dict) and inner.get('error'):
             return jsonify({'error': inner['error']}), 500
@@ -700,7 +699,6 @@ Anesu"""
 @app.route('/api/output/<filename>')
 def download_file(filename):
     """Download a generated document."""
-    from flask import send_from_directory
     return send_from_directory(app.config['OUTPUT_DIR'], filename, as_attachment=True)
 
 
@@ -716,31 +714,28 @@ def extract_client_name(raw: str) -> str:
             return data[0].get('name', '') or data[0].get('full_name', '')
         if isinstance(data, dict):
             return data.get('name', '') or data.get('full_name', '')
-    except:
+    except Exception:
         pass
     return ''
 
 
 def parse_json_from_response(text: str) -> dict:
     """Extract JSON from LLM response (may be wrapped in markdown code blocks)."""
-    # Try direct parse first
     try:
         return json.loads(text)
-    except:
+    except Exception:
         pass
-    # Try extracting from code blocks
     match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
     if match:
         try:
             return json.loads(match.group(1))
-        except:
+        except Exception:
             pass
-    # Try finding JSON object
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if match:
         try:
             return json.loads(match.group(0))
-        except:
+        except Exception:
             pass
     return {}
 
