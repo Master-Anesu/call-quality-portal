@@ -653,8 +653,8 @@ Have a read through and let me know if you'd like to chat about anything in the 
 Kind regards,
 Anesu"""
 
-    # Build email args — do NOT pass 'from', identity is auto-injected by MCP
     email_args = {
+        'from_user': SENDER_EMAIL,
         'to': rep_email,
         'subject': subject,
         'body': body,
