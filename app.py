@@ -541,11 +541,6 @@ def start_review_from_link():
     call_data = call_result.get('result', call_result)
     call_obj = call_data.get('call', call_data) if isinstance(call_data, dict) else {}
 
-    # Check if call has a transcript
-    has_transcript = call_obj.get('has_transcript')
-    if has_transcript is False or has_transcript == 'false':
-        return jsonify({'error': 'This call does not have a transcript available in Aircall. Only calls with transcripts can be reviewed.'}), 400
-
     user_info = call_obj.get('user', {}) if isinstance(call_obj, dict) else {}
     rep_name = user_info.get('name', '').replace(' - SR', '').replace(' - CSR', '').strip()
     rep_email = user_info.get('email', '')
@@ -633,7 +628,20 @@ def run_review_pipeline(job_id: str, data: dict):
         resolved_client = client_name
 
         def fetch_transcript():
-            return call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
+            result = call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
+            # Fallback: if get_aircall_transcript fails, try search_aircall_transcripts
+            if isinstance(result, dict):
+                inner = result.get('result', result)
+                has_segments = isinstance(inner, dict) and inner.get('transcript_segments')
+                has_raw = isinstance(inner, dict) and (inner.get('raw') or inner.get('transcript'))
+                has_error = result.get('error') or (isinstance(inner, dict) and inner.get('success') is False)
+                if (not has_segments and not has_raw) or has_error:
+                    import logging
+                    logging.getLogger(__name__).info(f'get_aircall_transcript returned no data for {call_id}, trying search_aircall_transcripts...')
+                    search_result = call_mcp_tool('search_aircall_transcripts', {'call_id': str(call_id)})
+                    if isinstance(search_result, dict) and not search_result.get('error'):
+                        return search_result
+            return result
 
         def fetch_client():
             if client_name != 'Unknown' or not client_phone:
