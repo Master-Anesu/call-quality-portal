@@ -56,6 +56,8 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
     try:
         resp = req_lib.post(url, json={"arguments": arguments}, headers=headers, timeout=30)
         resp.raise_for_status()
+        if not resp.text.strip():
+            return {"success": True}
         return resp.json()
     except Exception as e:
         return {"error": str(e)}
