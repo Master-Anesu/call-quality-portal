@@ -789,15 +789,35 @@ def run_review_pipeline(job_id: str, data: dict):
                 if transcript_result.get('error'):
                     jobs[job_id] = {'status': 'error', 'message': f"Failed to get transcript: {transcript_result['error']}", 'result': None, 'error': transcript_result['error']}
                     return
-                result = transcript_result.get('result', transcript_result)
-                segments = result.get('transcript_segments', [])
-                if segments:
-                    transcript_text = '\n'.join(
-                        f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
-                        for seg in segments if seg.get('text')
-                    )
-                else:
-                    transcript_text = result.get('raw', '') or result.get('transcript', '') or ''
+                # Unwrap MCP content envelope if present
+                unwrapped = transcript_result
+                if 'content' in transcript_result:
+                    content = transcript_result['content']
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get('type') == 'text':
+                                try:
+                                    unwrapped = json.loads(block['text'])
+                                    break
+                                except (json.JSONDecodeError, TypeError):
+                                    pass
+                    elif isinstance(content, str):
+                        try:
+                            unwrapped = json.loads(content)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                result = unwrapped.get('result', unwrapped) if isinstance(unwrapped, dict) else unwrapped
+                if isinstance(result, dict):
+                    segments = result.get('transcript_segments', [])
+                    if segments:
+                        transcript_text = '\n'.join(
+                            f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
+                            for seg in segments if seg.get('text')
+                        )
+                    else:
+                        transcript_text = result.get('raw', '') or result.get('transcript', '') or result.get('text', '') or ''
+                elif isinstance(result, str):
+                    transcript_text = result
             else:
                 transcript_text = str(transcript_result)
 
