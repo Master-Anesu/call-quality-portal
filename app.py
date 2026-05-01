@@ -50,6 +50,62 @@ AZURE_AD_CLIENT_SECRET = os.environ.get("AZURE_AD_CLIENT_SECRET", "")
 
 
 # ---------------------------------------------------------------------------
+# MCP Response Parsers
+# ---------------------------------------------------------------------------
+
+def _parse_aircall_calls(result) -> list:
+    """Extract calls list from various MCP response shapes."""
+    if not result or (isinstance(result, dict) and result.get('error')):
+        return []
+    if isinstance(result, list):
+        return result
+    if isinstance(result, dict):
+        if 'calls' in result and isinstance(result['calls'], list):
+            return result['calls']
+        if 'result' in result:
+            inner = result['result']
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict) and 'calls' in inner:
+                return inner['calls']
+        if 'content' in result:
+            content = result['content']
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get('type') == 'text':
+                        try:
+                            parsed = json.loads(block['text'])
+                            if isinstance(parsed, list):
+                                return parsed
+                            if isinstance(parsed, dict):
+                                if 'calls' in parsed:
+                                    return parsed['calls']
+                                if 'result' in parsed and isinstance(parsed['result'], dict):
+                                    return parsed['result'].get('calls', [])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+            elif isinstance(content, str):
+                try:
+                    parsed = json.loads(content)
+                    if isinstance(parsed, list):
+                        return parsed
+                    if isinstance(parsed, dict) and 'calls' in parsed:
+                        return parsed['calls']
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        if 'raw' in result and isinstance(result['raw'], str):
+            try:
+                parsed = json.loads(result['raw'])
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict) and 'calls' in parsed:
+                    return parsed['calls']
+            except (json.JSONDecodeError, TypeError):
+                pass
+    return []
+
+
+# ---------------------------------------------------------------------------
 # MCP Tool Caller
 # ---------------------------------------------------------------------------
 
