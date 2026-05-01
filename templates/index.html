@@ -1012,16 +1012,16 @@
             return;
         }
 
-        // Separate reviewable (10+ min with recording) from short calls
+        // Separate reviewable (5+ min with recording) from short calls
         const reviewable = calls.filter(c =>
-            c.duration && c.duration > 600 &&
+            c.duration && c.duration > 300 &&
             (c.has_transcript === 'true' || c.has_recording || c.recording_url)
         );
-        const shortCalls = calls.filter(c => !c.duration || c.duration <= 600 || (!c.has_recording && !c.recording_url && c.has_transcript !== 'true'));
+        const shortCalls = calls.filter(c => !c.duration || c.duration <= 300 || (!c.has_recording && !c.recording_url && c.has_transcript !== 'true'));
 
         const filterLabel = currentDateFilter === 'today' ? 'today' : currentDateFilter === 'week' ? 'this week' : '';
         document.getElementById('calls-subtitle').textContent =
-            `${calls.length} total calls${filterLabel ? ' ' + filterLabel : ''} · ${reviewable.length} reviewable (10+ min with recording)`;
+            `${calls.length} total calls${filterLabel ? ' ' + filterLabel : ''} · ${reviewable.length} reviewable (5+ min with recording)`;
 
         reviewable.slice(0, 30).forEach(call => {
             const direction = call.direction || 'unknown';
