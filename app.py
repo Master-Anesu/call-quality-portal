@@ -562,7 +562,25 @@ def get_calls():
         'date_from': date_from,
     })
 
-    calls = _parse_aircall_calls(result)
+    all_calls = _parse_aircall_calls(result)
+
+    # Only include calls over 5 minutes (300 seconds)
+    calls = []
+    for c in all_calls:
+        dur = c.get('duration') or 0
+        if isinstance(dur, str):
+            try:
+                dur = int(dur)
+            except ValueError:
+                dur = 0
+        if dur < 300:
+            continue
+        # Normalize recording fields so frontend can detect them
+        if c.get('recording') and not c.get('recording_url'):
+            c['recording_url'] = c['recording']
+        if c.get('recording') or c.get('recording_url'):
+            c['has_recording'] = True
+        calls.append(c)
 
     today_str = datetime.now().strftime('%Y-%m-%d')
     unique_clients = set()
