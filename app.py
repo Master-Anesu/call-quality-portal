@@ -133,6 +133,42 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Recording transcription (fallback when no stored transcript exists)
+# ---------------------------------------------------------------------------
+
+def transcribe_recording(recording_url: str) -> str:
+    """Download a call recording and transcribe via Azure OpenAI Whisper."""
+    import requests as req_lib
+    import tempfile
+    whisper_deployment = os.environ.get("AZURE_OPENAI_WHISPER_DEPLOYMENT", "")
+    if not whisper_deployment or not AZURE_OPENAI_API_KEY:
+        logger.warning("No Whisper deployment configured — cannot transcribe recording")
+        return ""
+    try:
+        resp = req_lib.get(recording_url, timeout=60)
+        resp.raise_for_status()
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp.write(resp.content)
+            tmp_path = tmp.name
+        from openai import AzureOpenAI
+        client = AzureOpenAI(
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        )
+        with open(tmp_path, "rb") as audio_file:
+            result = client.audio.transcriptions.create(
+                model=whisper_deployment,
+                file=audio_file,
+            )
+        os.unlink(tmp_path)
+        return result.text or ""
+    except Exception as e:
+        logger.error("Failed to transcribe recording: %s", e)
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # Azure OpenAI  (non-streaming — background thread handles the wait)
 # ---------------------------------------------------------------------------
 
