@@ -487,15 +487,49 @@ def get_aircall_users():
 
 @app.route('/api/calls', methods=['POST'])
 def get_calls():
-    """Get recent calls for an Aircall user by email. Pulls 90 days of history."""
-    user_email = request.json.get('user_email', '')
-    date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    """Get recent calls for an Aircall user by email with date filter support."""
+    user_email = request.json.get('user_email', '').strip()
+    date_filter = request.json.get('date', '').strip()
+    if not user_email:
+        return jsonify({'error': 'user_email is required'}), 400
+
+    if date_filter == 'today' or not date_filter:
+        date_from = datetime.now().strftime('%Y-%m-%d')
+    elif date_filter == 'week':
+        date_from = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    else:
+        date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+
     result = call_mcp_tool('list_aircall_calls', {
         'user_email': user_email,
-        'limit': 100,
+        'limit': 200,
         'date_from': date_from,
     })
-    return jsonify(result)
+
+    calls = _parse_aircall_calls(result)
+
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    unique_clients = set()
+    today_calls = 0
+    for c in calls:
+        call_date = c.get('created_at', '')[:10]
+        if call_date == today_str:
+            today_calls += 1
+            client_id = c.get('contact_name') or c.get('raw_digits') or c.get('phone_number') or ''
+            if client_id:
+                unique_clients.add(client_id.lower())
+
+    return jsonify({
+        'result': {
+            'calls': calls,
+            'stats': {
+                'total_calls': len(calls),
+                'today_calls': today_calls,
+                'unique_clients_today': len(unique_clients),
+                'date_from': date_from,
+            }
+        }
+    })
 
 
 @app.route('/api/start-review', methods=['POST'])
@@ -607,6 +641,7 @@ def run_review_pipeline(job_id: str, data: dict):
         client_name = data.get('client_name', 'Unknown')
         client_phone = data.get('client_phone', '')
         direct_link = data.get('direct_link', '')
+        recording_url = data.get('recording_url', '')
 
         # Step 1: Get transcript (pre-provided or fetched from Aircall)
         transcript_text = data.get('transcript_text', '')
@@ -656,8 +691,13 @@ def run_review_pipeline(job_id: str, data: dict):
             else:
                 transcript_text = str(transcript_result)
 
+            if not transcript_text and recording_url:
+                jobs[job_id]['message'] = 'No stored transcript — transcribing from recording (live)...'
+                logger.info('No transcript in API for call %s, transcribing recording live', call_id)
+                transcript_text = transcribe_recording(recording_url)
+
             if not transcript_text:
-                jobs[job_id] = {'status': 'error', 'message': 'No transcript available for this call.', 'result': None, 'error': 'No transcript'}
+                jobs[job_id] = {'status': 'error', 'message': 'No transcript or recording available for this call.', 'result': None, 'error': 'No transcript'}
                 return
 
             client_result = future_client.result()
