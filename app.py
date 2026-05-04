@@ -139,25 +139,33 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 
-def get_fresh_recording_url(call_id: str) -> str:
-    """Fetch a fresh recording URL for a call via the Aircall asset endpoint or MCP re-query."""
-    import requests as req_lib
-    # Try the Aircall assets redirect endpoint first (returns a fresh signed URL)
-    asset_url = f"https://assets.aircall.io/calls/{call_id}/recording"
-    try:
-        resp = req_lib.head(asset_url, allow_redirects=True, timeout=15)
-        if resp.status_code == 200 and 'amazonaws.com' in resp.url:
-            logger.info('Got fresh recording URL via assets endpoint for call %s', call_id)
-            return resp.url
-    except Exception as e:
-        logger.warning('assets.aircall.io lookup failed for call %s: %s', call_id, e)
+def get_call_details(call_id: str) -> dict:
+    """Fetch full call details including transcript segments and recording URL.
+    Uses get_aircall_call_details which returns everything in one request."""
+    result = call_mcp_tool('get_aircall_call_details', {'call_id': str(call_id)})
+    if isinstance(result, dict):
+        # Unwrap MCP content envelope
+        if 'content' in result:
+            content = result['content']
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get('type') == 'text':
+                        try:
+                            result = json.loads(block['text'])
+                            break
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+        inner = result.get('result', result)
+        if isinstance(inner, dict):
+            return inner.get('call', inner)
+    return {}
 
-    # Fallback: re-query list_aircall_calls to get a fresh signed URL
-    result = call_mcp_tool('list_aircall_calls', {'call_id': str(call_id), 'limit': 1})
-    calls = _parse_aircall_calls(result)
-    if calls:
-        return calls[0].get('recording', '') or calls[0].get('recording_url', '')
-    return ''
+
+def get_fresh_recording_url(call_id: str) -> str:
+    """Get a recording URL for a call. Note: MCP tools return pre-signed S3 URLs
+    that may be expired. This fetches whatever is available."""
+    call_data = get_call_details(call_id)
+    return call_data.get('recording', '') or call_data.get('recording_url', '') or ''
 
 
 def transcribe_recording(recording_url: str, call_id: str = '') -> str:
@@ -793,21 +801,30 @@ def run_review_pipeline(job_id: str, data: dict):
 
         def fetch_transcript():
             if data.get('transcript_text'):
-                return {'result': {'transcript': data['transcript_text']}}
+                return data['transcript_text']
+            # Use get_aircall_call_details — returns full transcript segments in one call
+            call_data = get_call_details(str(call_id))
+            if call_data:
+                transcript = call_data.get('transcript', {})
+                segments = transcript.get('segments', []) if isinstance(transcript, dict) else []
+                if segments:
+                    return '\n'.join(
+                        f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
+                        for seg in segments if seg.get('text')
+                    )
+            # Fallback to get_aircall_transcript
             result = call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
-            # Fallback: if get_aircall_transcript fails, try search_aircall_transcripts
             if isinstance(result, dict):
                 inner = result.get('result', result)
-                has_segments = isinstance(inner, dict) and inner.get('transcript_segments')
-                has_raw = isinstance(inner, dict) and (inner.get('raw') or inner.get('transcript'))
-                has_error = result.get('error') or (isinstance(inner, dict) and inner.get('success') is False)
-                if (not has_segments and not has_raw) or has_error:
-                    import logging
-                    logging.getLogger(__name__).info(f'get_aircall_transcript returned no data for {call_id}, trying search_aircall_transcripts...')
-                    search_result = call_mcp_tool('search_aircall_transcripts', {'call_id': str(call_id)})
-                    if isinstance(search_result, dict) and not search_result.get('error'):
-                        return search_result
-            return result
+                if isinstance(inner, dict):
+                    segs = inner.get('transcript_segments', [])
+                    if segs:
+                        return '\n'.join(
+                            f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
+                            for seg in segs if seg.get('text')
+                        )
+                    return inner.get('raw', '') or inner.get('transcript', '') or inner.get('text', '') or ''
+            return ''
 
         def fetch_client():
             if client_name != 'Unknown' or not client_phone:
@@ -818,62 +835,21 @@ def run_review_pipeline(job_id: str, data: dict):
             future_transcript = pool.submit(fetch_transcript)
             future_client = pool.submit(fetch_client)
 
-            transcript_result = future_transcript.result()
-            if isinstance(transcript_result, dict):
-                # Don't abort on "no transcript found" — expected for same-day calls (batched at 6am)
-                err = transcript_result.get('error')
-                if err and 'no transcript' not in str(err).lower() and 'not found' not in str(err).lower():
-                    jobs[job_id] = {'status': 'error', 'message': f"Failed to get transcript: {err}", 'result': None, 'error': err}
-                    return
-                # Unwrap MCP content envelope if present
-                unwrapped = transcript_result
-                if 'content' in transcript_result:
-                    content = transcript_result['content']
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get('type') == 'text':
-                                try:
-                                    unwrapped = json.loads(block['text'])
-                                    break
-                                except (json.JSONDecodeError, TypeError):
-                                    pass
-                    elif isinstance(content, str):
-                        try:
-                            unwrapped = json.loads(content)
-                        except (json.JSONDecodeError, TypeError):
-                            pass
-                result = unwrapped.get('result', unwrapped) if isinstance(unwrapped, dict) else unwrapped
-                if isinstance(result, dict):
-                    segments = result.get('transcript_segments', [])
-                    if segments:
-                        transcript_text = '\n'.join(
-                            f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
-                            for seg in segments if seg.get('text')
-                        )
-                    else:
-                        transcript_text = result.get('raw', '') or result.get('transcript', '') or result.get('text', '') or ''
-                elif isinstance(result, str):
-                    transcript_text = result
-            else:
-                transcript_text = str(transcript_result)
+            transcript_text = future_transcript.result() or ''
 
             # If no stored transcript, transcribe from recording (live via Groq Whisper)
             if not transcript_text and (recording_url or call_id):
                 jobs[job_id]['message'] = 'No stored transcript — transcribing from recording...'
                 logger.info('No transcript in API for call %s, transcribing recording live', call_id)
-                url_to_use = recording_url
-                if not url_to_use and call_id:
-                    url_to_use = get_fresh_recording_url(str(call_id))
-                if url_to_use:
-                    transcript_text = transcribe_recording(url_to_use, call_id=str(call_id))
+                transcript_text = transcribe_recording(recording_url, call_id=str(call_id) if call_id else '')
 
             if not transcript_text:
                 if not GROQ_API_KEY:
                     msg = 'Transcription service not configured (GROQ_API_KEY missing). Transcripts are batched at 6am — try again tomorrow or upload a transcript file.'
-                elif not recording_url and not call_id:
+                elif not recording_url:
                     msg = 'No recording found for this call. The call may be too recent or recording was not enabled.'
                 else:
-                    msg = 'Could not transcribe the recording. The recording URL may have expired or the file is unavailable.'
+                    msg = 'Could not transcribe the recording. The signed recording URL has expired. Please try selecting the call again.'
                 jobs[job_id] = {'status': 'error', 'message': msg, 'result': None, 'error': 'No transcript'}
                 return
 
