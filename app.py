@@ -138,8 +138,31 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-def transcribe_recording(recording_url: str) -> str:
-    """Download a call recording and transcribe via Groq Whisper API."""
+
+def get_fresh_recording_url(call_id: str) -> str:
+    """Fetch a fresh recording URL for a call via the Aircall asset endpoint or MCP re-query."""
+    import requests as req_lib
+    # Try the Aircall assets redirect endpoint first (returns a fresh signed URL)
+    asset_url = f"https://assets.aircall.io/calls/{call_id}/recording"
+    try:
+        resp = req_lib.head(asset_url, allow_redirects=True, timeout=15)
+        if resp.status_code == 200 and 'amazonaws.com' in resp.url:
+            logger.info('Got fresh recording URL via assets endpoint for call %s', call_id)
+            return resp.url
+    except Exception as e:
+        logger.warning('assets.aircall.io lookup failed for call %s: %s', call_id, e)
+
+    # Fallback: re-query list_aircall_calls to get a fresh signed URL
+    result = call_mcp_tool('list_aircall_calls', {'call_id': str(call_id), 'limit': 1})
+    calls = _parse_aircall_calls(result)
+    if calls:
+        return calls[0].get('recording', '') or calls[0].get('recording_url', '')
+    return ''
+
+
+def transcribe_recording(recording_url: str, call_id: str = '') -> str:
+    """Download a call recording and transcribe via Groq Whisper API.
+    If the recording_url is expired (S3 signed URL), attempts to fetch a fresh one."""
     import requests as req_lib
     import tempfile
     if not GROQ_API_KEY:
@@ -147,6 +170,16 @@ def transcribe_recording(recording_url: str) -> str:
         return ""
     try:
         resp = req_lib.get(recording_url, timeout=120)
+        # If the signed URL expired, try to get a fresh one
+        if resp.status_code in (403, 400) and call_id:
+            logger.info('Recording URL expired for call %s, fetching fresh URL...', call_id)
+            fresh_url = get_fresh_recording_url(call_id)
+            if fresh_url:
+                recording_url = fresh_url
+                resp = req_lib.get(recording_url, timeout=120)
+            else:
+                logger.error('Could not get fresh recording URL for call %s', call_id)
+                return ""
         resp.raise_for_status()
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp.write(resp.content)
@@ -613,7 +646,9 @@ def get_calls():
         # Normalize recording fields so frontend can detect them
         if c.get('recording') and not c.get('recording_url'):
             c['recording_url'] = c['recording']
-        if c.get('recording') or c.get('recording_url'):
+        if not c.get('recording_url') and c.get('asset'):
+            c['recording_url'] = c['asset']
+        if c.get('recording') or c.get('recording_url') or c.get('asset'):
             c['has_recording'] = True
         calls.append(c)
 
@@ -785,8 +820,10 @@ def run_review_pipeline(job_id: str, data: dict):
 
             transcript_result = future_transcript.result()
             if isinstance(transcript_result, dict):
-                if transcript_result.get('error'):
-                    jobs[job_id] = {'status': 'error', 'message': f"Failed to get transcript: {transcript_result['error']}", 'result': None, 'error': transcript_result['error']}
+                # Don't abort on "no transcript found" — expected for same-day calls (batched at 6am)
+                err = transcript_result.get('error')
+                if err and 'no transcript' not in str(err).lower() and 'not found' not in str(err).lower():
+                    jobs[job_id] = {'status': 'error', 'message': f"Failed to get transcript: {err}", 'result': None, 'error': err}
                     return
                 # Unwrap MCP content envelope if present
                 unwrapped = transcript_result
@@ -820,13 +857,24 @@ def run_review_pipeline(job_id: str, data: dict):
             else:
                 transcript_text = str(transcript_result)
 
-            if not transcript_text and recording_url:
-                jobs[job_id]['message'] = 'No stored transcript — transcribing from recording (live)...'
+            # If no stored transcript, transcribe from recording (live via Groq Whisper)
+            if not transcript_text and (recording_url or call_id):
+                jobs[job_id]['message'] = 'No stored transcript — transcribing from recording...'
                 logger.info('No transcript in API for call %s, transcribing recording live', call_id)
-                transcript_text = transcribe_recording(recording_url)
+                url_to_use = recording_url
+                if not url_to_use and call_id:
+                    url_to_use = get_fresh_recording_url(str(call_id))
+                if url_to_use:
+                    transcript_text = transcribe_recording(url_to_use, call_id=str(call_id))
 
             if not transcript_text:
-                jobs[job_id] = {'status': 'error', 'message': 'No transcript or recording available for this call.', 'result': None, 'error': 'No transcript'}
+                if not GROQ_API_KEY:
+                    msg = 'Transcription service not configured (GROQ_API_KEY missing). Transcripts are batched at 6am — try again tomorrow or upload a transcript file.'
+                elif not recording_url and not call_id:
+                    msg = 'No recording found for this call. The call may be too recent or recording was not enabled.'
+                else:
+                    msg = 'Could not transcribe the recording. The recording URL may have expired or the file is unavailable.'
+                jobs[job_id] = {'status': 'error', 'message': msg, 'result': None, 'error': 'No transcript'}
                 return
 
             client_result = future_client.result()
