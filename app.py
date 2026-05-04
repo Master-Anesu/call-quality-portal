@@ -779,6 +779,100 @@ def start_review_from_transcript():
     return jsonify({'job_id': job_id, 'rep_name': rep_name, 'rep_email': rep_email, 'rep_role': rep_role, 'est_id': est_id})
 
 
+@app.route('/api/start-review-from-recording', methods=['POST'])
+def start_review_from_recording():
+    """Start a review from an uploaded audio recording. Transcribes via Groq Whisper then scores."""
+    import requests as req_lib
+    import tempfile
+
+    if not GROQ_API_KEY:
+        return jsonify({'error': 'Transcription service not configured (GROQ_API_KEY missing).'}), 500
+
+    file = request.files.get('file')
+    if not file or not file.filename:
+        return jsonify({'error': 'Please upload a recording file (.mp3, .wav, .m4a).'}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ('.mp3', '.wav', '.m4a', '.ogg', '.webm'):
+        return jsonify({'error': f'Unsupported audio format: {ext}. Please upload .mp3, .wav, or .m4a.'}), 400
+
+    tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+    file.save(tmp.name)
+    tmp_path = tmp.name
+
+    rep_name = ''
+    base = os.path.splitext(file.filename)[0]
+    parts = re.split(r'[_\-\s]+', base)
+    name_parts = [p for p in parts if p[0:1].isupper() and len(p) > 1 and p.lower() not in ('call', 'transcript', 'review', 'recording', 'aircall', 'audio')]
+    if len(name_parts) >= 2:
+        rep_name = ' '.join(name_parts[:2])
+
+    rep_email = ''
+    rep_role = ''
+    est_id = ''
+    if rep_name:
+        emp_result = call_mcp_tool('search_employees', {'query': rep_name})
+        if isinstance(emp_result, dict) and not emp_result.get('error'):
+            employees = []
+            inner = emp_result.get('result', emp_result)
+            if isinstance(inner, dict): employees = inner.get('employees', inner.get('results', []))
+            elif isinstance(inner, list): employees = inner
+            for emp in (employees if isinstance(employees, list) else []):
+                emp_name = emp.get('full_name', '') or emp.get('name', '')
+                if emp_name and rep_name.lower() in emp_name.lower():
+                    title_raw = emp.get('title', '')
+                    est_match = re.match(r'(EST-\d+)\s*(.*)', title_raw)
+                    est_id = emp.get('employee_id', '') or emp.get('est_id', '') or (est_match.group(1) if est_match else '')
+                    rep_role = emp.get('role', '') or emp.get('job_title', '') or (est_match.group(2) if est_match else title_raw)
+                    rep_email = emp.get('email', '') or emp.get('work_email', '')
+                    fn = emp.get('full_name', '') or emp.get('name', '')
+                    if fn: rep_name = fn
+                    break
+
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {'status': 'running', 'message': 'Transcribing recording...', 'result': None, 'error': None}
+
+    def transcribe_and_review():
+        try:
+            mime_types = {'.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.webm': 'audio/webm'}
+            mime = mime_types.get(ext, 'audio/mpeg')
+            with open(tmp_path, 'rb') as audio_file:
+                result = req_lib.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                    files={"file": (file.filename, audio_file, mime)},
+                    data={"model": "whisper-large-v3", "language": "en", "response_format": "text"},
+                    timeout=300,
+                )
+                result.raise_for_status()
+            os.unlink(tmp_path)
+            transcript = result.text.strip()
+            if not transcript:
+                jobs[job_id] = {'status': 'error', 'message': 'Transcription returned empty. The recording may be silent or corrupted.', 'result': None, 'error': 'Empty transcription'}
+                return
+            jobs[job_id]['message'] = 'Transcription complete. AI is scoring the call...'
+            pipeline_data = {
+                'rep_name': rep_name or 'Unknown Rep', 'rep_email': rep_email,
+                'rep_role': rep_role, 'est_id': est_id,
+                'call_date': datetime.now().strftime('%d %b %Y'),
+                'call_direction': '', 'call_duration': '',
+                'client_name': 'Unknown', 'client_phone': '',
+                'transcript_text': transcript,
+            }
+            run_review_pipeline(job_id, pipeline_data)
+        except Exception as e:
+            logger.error('Recording transcription failed: %s', e)
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            jobs[job_id] = {'status': 'error', 'message': f'Transcription failed: {str(e)}', 'result': None, 'error': str(e)}
+
+    thread = threading.Thread(target=transcribe_and_review, daemon=True)
+    thread.start()
+    return jsonify({'job_id': job_id, 'rep_name': rep_name, 'rep_email': rep_email, 'rep_role': rep_role, 'est_id': est_id})
+
+
 def run_review_pipeline(job_id: str, data: dict):
     """Background worker: fetch transcript, score with LLM, generate doc."""
     try:

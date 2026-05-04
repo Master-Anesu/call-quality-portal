@@ -550,16 +550,16 @@
     <!-- Panel 1: Search -->
     <div class="panel active" id="panel-1">
         <div class="card">
-            <div class="card-title">Quick Review &mdash; Upload Transcript</div>
-            <p class="text-muted" style="margin-bottom: 12px;">Upload a call transcript file. Rep name is auto-detected from the content or filename.</p>
+            <div class="card-title">Quick Review &mdash; Upload File</div>
+            <p class="text-muted" style="margin-bottom: 12px;">Upload a transcript (.txt) or call recording (.mp3/.wav/.m4a). Rep name is auto-detected from filename.</p>
             <div id="file-upload-area" onclick="document.getElementById('transcript-file').click()" style="border: 2px dashed var(--gray-300); border-radius: 10px; padding: 28px 16px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; background: var(--white);">
-                <div style="font-size: 28px; margin-bottom: 6px; color: var(--gray-300);">&#128196;</div>
-                <div style="font-weight: 600; color: var(--gray-700); margin-bottom: 4px;" id="file-upload-label">Click to upload transcript file</div>
-                <div style="font-size: 12px; color: var(--gray-500);">.txt file</div>
-                <input type="file" id="transcript-file" accept=".txt,.text" style="display: none;" onchange="handleFileSelect(this)">
+                <div style="font-size: 28px; margin-bottom: 6px; color: var(--gray-300);">&#127925;</div>
+                <div style="font-weight: 600; color: var(--gray-700); margin-bottom: 4px;" id="file-upload-label">Click to upload transcript or recording</div>
+                <div style="font-size: 12px; color: var(--gray-500);">.txt, .mp3, .wav, .m4a</div>
+                <input type="file" id="transcript-file" accept=".txt,.text,.mp3,.wav,.m4a,.ogg,.webm" style="display: none;" onchange="handleFileSelect(this)">
             </div>
             <div style="margin-top: 12px;">
-                <button class="btn btn-teal" id="quick-review-btn" onclick="quickReviewFromTranscript()" style="width: 100%;" disabled>Upload a file first</button>
+                <button class="btn btn-teal" id="quick-review-btn" onclick="quickReviewFromFile()" style="width: 100%;" disabled>Upload a file first</button>
             </div>
             <div id="quick-review-error" class="text-muted" style="color: var(--red); margin-top: 8px; display: none;"></div>
         </div>
@@ -756,35 +756,40 @@
             label.textContent = file.name;
             label.style.color = 'var(--teal)';
             btn.disabled = false;
-            btn.textContent = 'Review Transcript';
+            const isAudio = file.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm)$/i.test(file.name);
+            btn.textContent = isAudio ? 'Transcribe & Review' : 'Review Transcript';
         } else {
             selectedFile = null;
-            label.textContent = 'Click to upload transcript file';
+            label.textContent = 'Click to upload transcript or recording';
             label.style.color = 'var(--gray-700)';
             btn.disabled = true;
             btn.textContent = 'Upload a file first';
         }
     }
 
-    async function quickReviewFromTranscript() {
+    async function quickReviewFromFile() {
         const errorDiv = document.getElementById('quick-review-error');
         errorDiv.style.display = 'none';
-        if (!selectedFile) { errorDiv.textContent = 'Please upload a transcript file.'; errorDiv.style.display = 'block'; return; }
+        if (!selectedFile) { errorDiv.textContent = 'Please upload a file.'; errorDiv.style.display = 'block'; return; }
+        const isAudio = selectedFile.type.startsWith('audio/') || /\.(mp3|wav|m4a|ogg|webm)$/i.test(selectedFile.name);
         const btn = document.getElementById('quick-review-btn');
-        btn.disabled = true; btn.textContent = 'Starting review...';
+        btn.disabled = true; btn.textContent = isAudio ? 'Transcribing recording...' : 'Starting review...';
         try {
             const formData = new FormData();
             formData.append('file', selectedFile);
-            const res = await fetch('/api/start-review-from-transcript', { method: 'POST', body: formData });
+            const endpoint = isAudio ? '/api/start-review-from-recording' : '/api/start-review-from-transcript';
+            const res = await fetch(endpoint, { method: 'POST', body: formData });
             const data = await res.json();
             if (!res.ok || data.error) { errorDiv.textContent = data.error || 'Failed to start review'; errorDiv.style.display = 'block'; return; }
             state.employee = { name: data.rep_name || '', email: data.rep_email || '', role: data.rep_role || '', est_id: data.est_id || '' };
-            state.selectedCall = { id: 'transcript', direction: '', duration: '', date: new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }), phone: '', contact_name: '' };
+            state.selectedCall = { id: 'upload', direction: '', duration: '', date: new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }), phone: '', contact_name: '' };
             goToStep(3);
             pollForQuickReview(data.job_id);
         } catch (err) { errorDiv.textContent = 'Request failed: ' + err.message; errorDiv.style.display = 'block';
-        } finally { btn.disabled = false; btn.textContent = 'Review Transcript'; }
+        } finally { btn.disabled = false; btn.textContent = isAudio ? 'Transcribe & Review' : 'Review Transcript'; }
     }
+
+    function quickReviewFromTranscript() { quickReviewFromFile(); }
 
         function pollForQuickReview(jobId) {
         const statusBar = document.getElementById('status-bar');
