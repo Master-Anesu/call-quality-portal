@@ -48,6 +48,10 @@ AZURE_AD_TENANT_ID = os.environ.get("AZURE_AD_TENANT_ID", "")
 AZURE_AD_CLIENT_ID = os.environ.get("AZURE_AD_CLIENT_ID", "")
 AZURE_AD_CLIENT_SECRET = os.environ.get("AZURE_AD_CLIENT_SECRET", "")
 
+DATABRICKS_HOST = os.environ.get("DATABRICKS_HOST", "")
+DATABRICKS_TOKEN = os.environ.get("DATABRICKS_TOKEN", "")
+DATABRICKS_WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
+
 
 # ---------------------------------------------------------------------------
 # MCP Response Parsers
@@ -133,6 +137,74 @@ def call_mcp_tool(tool_name: str, arguments: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Databricks direct query (for transcripts not yet in MCP cache)
+# ---------------------------------------------------------------------------
+
+def query_databricks(sql: str) -> list:
+    """Execute a SQL query against Databricks and return rows."""
+    import requests as req_lib
+    if not all([DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID]):
+        return []
+    try:
+        resp = req_lib.post(
+            f"{DATABRICKS_HOST}/api/2.0/sql/statements/",
+            headers={"Authorization": f"Bearer {DATABRICKS_TOKEN}", "Content-Type": "application/json"},
+            json={"warehouse_id": DATABRICKS_WAREHOUSE_ID, "statement": sql, "wait_timeout": "30s"},
+            timeout=35,
+        )
+        data = resp.json()
+        if data.get('status', {}).get('state') == 'SUCCEEDED':
+            return data.get('result', {}).get('data_array', [])
+    except Exception as e:
+        logger.error("Databricks query failed: %s", e)
+    return []
+
+
+def get_transcript_from_databricks(call_id: str) -> str:
+    """Fetch transcript directly from Databricks transcriptions table."""
+    rows = query_databricks(f"""
+        SELECT content.utterances
+        FROM trilogycare_dev.aircall.transcriptions
+        WHERE call_id = {call_id}
+        LIMIT 1
+    """)
+    if not rows or not rows[0][0]:
+        return ''
+    utterances = rows[0][0]
+    if isinstance(utterances, str):
+        try:
+            utterances = json.loads(utterances)
+        except (json.JSONDecodeError, TypeError):
+            return ''
+    if isinstance(utterances, list):
+        return '\n'.join(
+            f"[{u.get('participant_type', 'unknown')}]: {u.get('text', '')}"
+            for u in utterances if u.get('text')
+        )
+    return ''
+
+
+def cache_recording(call_id: str, recording_url: str) -> str:
+    """Download recording to local cache while URL is still valid. Returns local path or empty."""
+    import requests as req_lib
+    cache_dir = os.path.join(app.config['OUTPUT_DIR'], 'recordings')
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, f"{call_id}.mp3")
+    if os.path.isfile(cache_path):
+        return cache_path
+    try:
+        resp = req_lib.get(recording_url, timeout=120)
+        if resp.status_code == 200 and len(resp.content) > 1000:
+            with open(cache_path, 'wb') as f:
+                f.write(resp.content)
+            logger.info("Cached recording for call %s (%d bytes)", call_id, len(resp.content))
+            return cache_path
+    except Exception as e:
+        logger.warning("Failed to cache recording for call %s: %s", call_id, e)
+    return ''
+
+
+# ---------------------------------------------------------------------------
 # Recording transcription (fallback when no stored transcript exists)
 # ---------------------------------------------------------------------------
 
@@ -169,39 +241,62 @@ def get_fresh_recording_url(call_id: str) -> str:
 
 
 def transcribe_recording(recording_url: str, call_id: str = '') -> str:
-    """Download a call recording and transcribe via Groq Whisper API.
-    If the recording_url is expired (S3 signed URL), attempts to fetch a fresh one."""
+    """Transcribe a call recording via Groq Whisper. Checks local cache first."""
     import requests as req_lib
     import tempfile
     if not GROQ_API_KEY:
         logger.warning("No GROQ_API_KEY configured — cannot transcribe recording")
         return ""
+
+    tmp_path = None
     try:
-        resp = req_lib.get(recording_url, timeout=120)
-        # If the signed URL expired, try to get a fresh one
-        if resp.status_code in (403, 400) and call_id:
-            logger.info('Recording URL expired for call %s, fetching fresh URL...', call_id)
-            fresh_url = get_fresh_recording_url(call_id)
-            if fresh_url:
-                recording_url = fresh_url
-                resp = req_lib.get(recording_url, timeout=120)
-            else:
-                logger.error('Could not get fresh recording URL for call %s', call_id)
-                return ""
-        resp.raise_for_status()
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
-            tmp.write(resp.content)
-            tmp_path = tmp.name
+        # Check for cached local recording first
+        if call_id:
+            cache_dir = os.path.join(app.config['OUTPUT_DIR'], 'recordings')
+            cached = os.path.join(cache_dir, f"{call_id}.mp3")
+            if os.path.isfile(cached):
+                logger.info("Using cached recording for call %s", call_id)
+                tmp_path = cached
+
+        # Handle local file path
+        if not tmp_path and recording_url and os.path.isfile(recording_url):
+            tmp_path = recording_url
+
+        # Download from URL
+        if not tmp_path and recording_url:
+            resp = req_lib.get(recording_url, timeout=120)
+            if resp.status_code in (403, 400) and call_id:
+                logger.info('Recording URL expired for call %s, fetching fresh URL...', call_id)
+                fresh_url = get_fresh_recording_url(call_id)
+                if fresh_url:
+                    recording_url = fresh_url
+                    resp = req_lib.get(recording_url, timeout=120)
+                else:
+                    logger.error('Could not get fresh recording URL for call %s', call_id)
+                    return ""
+            resp.raise_for_status()
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+                tmp.write(resp.content)
+                tmp_path = tmp.name
+
+        if not tmp_path:
+            return ""
+
         with open(tmp_path, "rb") as audio_file:
             result = req_lib.post(
                 "https://api.groq.com/openai/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
                 files={"file": ("recording.mp3", audio_file, "audio/mpeg")},
                 data={"model": "whisper-large-v3", "language": "en", "response_format": "text"},
-                timeout=120,
+                timeout=300,
             )
             result.raise_for_status()
-        os.unlink(tmp_path)
+
+        # Don't delete cached recordings
+        cache_dir = os.path.join(app.config['OUTPUT_DIR'], 'recordings')
+        if tmp_path and not tmp_path.startswith(cache_dir) and tmp_path != recording_url:
+            os.unlink(tmp_path)
+
         return result.text.strip() or ""
     except Exception as e:
         logger.error("Failed to transcribe recording: %s", e)
@@ -671,6 +766,15 @@ def get_calls():
             if client_id:
                 unique_clients.add(client_id.lower())
 
+    # Background-cache today's recordings while S3 URLs might still be valid
+    def _cache_today_recordings():
+        for c in calls:
+            rec_url = c.get('recording_url') or c.get('recording') or ''
+            cid = c.get('id') or c.get('call_id')
+            if rec_url and cid and 'amazonaws.com' in rec_url:
+                cache_recording(str(cid), rec_url)
+    threading.Thread(target=_cache_today_recordings, daemon=True).start()
+
     return jsonify({
         'result': {
             'calls': calls,
@@ -896,7 +1000,12 @@ def run_review_pipeline(job_id: str, data: dict):
         def fetch_transcript():
             if data.get('transcript_text'):
                 return data['transcript_text']
-            # Use get_aircall_call_details — returns full transcript segments in one call
+            # Priority 1: Query Databricks transcriptions table directly
+            if call_id:
+                db_transcript = get_transcript_from_databricks(str(call_id))
+                if db_transcript:
+                    return db_transcript
+            # Priority 2: get_aircall_call_details (has segments for processed calls)
             call_data = get_call_details(str(call_id))
             if call_data:
                 transcript = call_data.get('transcript', {})
@@ -906,7 +1015,7 @@ def run_review_pipeline(job_id: str, data: dict):
                         f"[{seg.get('participant_type', 'unknown')}]: {seg.get('text', '')}"
                         for seg in segments if seg.get('text')
                     )
-            # Fallback to get_aircall_transcript
+            # Priority 3: get_aircall_transcript MCP tool
             result = call_mcp_tool('get_aircall_transcript', {'call_id': str(call_id)})
             if isinstance(result, dict):
                 inner = result.get('result', result)
