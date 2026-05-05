@@ -160,6 +160,63 @@ def query_databricks(sql: str) -> list:
     return []
 
 
+def normalize_phone(phone: str) -> str:
+    """Normalize a phone number to digits only (last 9 digits) for matching."""
+    if not phone:
+        return ''
+    digits = re.sub(r'\D', '', phone)
+    # Use last 9 digits to handle country code variations (+61 vs 0)
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
+def get_active_allocated_phones() -> set:
+    """Get set of normalized phone numbers for leads with Journey_Stage 'B-Active HCP' or 'B-Allocated HCP'."""
+    rows = query_databricks("""
+        SELECT Phone, Mobile, Contact_Phone
+        FROM trilogycare_dev.zoho_crm.leads
+        WHERE Journey_Stage IN ('B-Active HCP', 'B-Allocated HCP')
+    """)
+    phones = set()
+    for row in rows:
+        for val in row:
+            if val:
+                normalized = normalize_phone(str(val))
+                if normalized:
+                    phones.add(normalized)
+    return phones
+
+
+def check_lead_journey_stage(phone: str) -> dict:
+    """Check if a phone number belongs to a lead with Active or Allocated journey stage.
+    Returns dict with 'is_valid' bool, 'journey_stage', and 'lead_name'."""
+    if not phone:
+        return {'is_valid': False, 'journey_stage': None, 'lead_name': None}
+    normalized = normalize_phone(phone)
+    if not normalized:
+        return {'is_valid': False, 'journey_stage': None, 'lead_name': None}
+    rows = query_databricks(f"""
+        SELECT First_Name, Last_Name, Journey_Stage, Phone, Mobile
+        FROM trilogycare_dev.zoho_crm.leads
+        WHERE Journey_Stage IN ('B-Active HCP', 'B-Allocated HCP')
+        AND (
+            RIGHT(REGEXP_REPLACE(Phone, '[^0-9]', ''), 9) = '{normalized}'
+            OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
+            OR RIGHT(REGEXP_REPLACE(Contact_Phone, '[^0-9]', ''), 9) = '{normalized}'
+        )
+        LIMIT 1
+    """)
+    if rows:
+        first = rows[0][0] or ''
+        last = rows[0][1] or ''
+        stage = rows[0][2] or ''
+        return {
+            'is_valid': True,
+            'journey_stage': stage,
+            'lead_name': f"{first} {last}".strip(),
+        }
+    return {'is_valid': False, 'journey_stage': None, 'lead_name': None}
+
+
 def get_transcript_from_databricks(call_id: str) -> str:
     """Fetch transcript directly from Databricks transcriptions table."""
     rows = query_databricks(f"""
@@ -736,7 +793,10 @@ def get_calls():
 
     all_calls = _parse_aircall_calls(result)
 
-    # Only include calls over 5 minutes (300 seconds)
+    # Get active/allocated lead phone numbers for Zoho filtering
+    active_phones = get_active_allocated_phones()
+
+    # Only include calls over 5 minutes (300 seconds) AND where caller is an active/allocated lead
     calls = []
     for c in all_calls:
         dur = c.get('duration') or 0
@@ -747,6 +807,12 @@ def get_calls():
                 dur = 0
         if dur < 300:
             continue
+        # Check if caller phone matches an active/allocated Zoho lead
+        caller_phone = c.get('raw_digits') or c.get('phone_number') or c.get('number', {}).get('digits', '') or ''
+        caller_normalized = normalize_phone(caller_phone)
+        if caller_normalized and active_phones and caller_normalized not in active_phones:
+            continue
+        c['zoho_verified'] = True
         # Normalize recording fields so frontend can detect them
         if c.get('recording') and not c.get('recording_url'):
             c['recording_url'] = c['recording']
@@ -993,6 +1059,20 @@ def run_review_pipeline(job_id: str, data: dict):
         client_phone = data.get('client_phone', '')
         direct_link = data.get('direct_link', '')
         recording_url = data.get('recording_url', '')
+
+        # Step 0: Verify caller is an active/allocated Zoho lead
+        if client_phone:
+            lead_check = check_lead_journey_stage(client_phone)
+            if not lead_check['is_valid']:
+                jobs[job_id] = {
+                    'status': 'error',
+                    'message': 'This call is not eligible for review — the caller is not in Zoho with an Active or Allocated journey stage.',
+                    'result': None,
+                    'error': 'Lead not active/allocated',
+                }
+                return
+            if lead_check['lead_name'] and client_name == 'Unknown':
+                client_name = lead_check['lead_name']
 
         # Step 1: Get transcript (pre-provided or fetched from Aircall)
         transcript_text = data.get('transcript_text', '')
