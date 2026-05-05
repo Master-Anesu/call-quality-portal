@@ -2352,23 +2352,26 @@
         if (!calls.length) { document.getElementById('calls-subtitle').textContent = 'No recent calls found for this rep.'; return; }
 
         const reviewable = calls.filter(c => c.duration && c.duration > 300 && (c.has_transcript === 'true' || c.has_recording || c.recording_url));
+        reviewable.sort((a, b) => (b.has_transcript === 'true' ? 1 : 0) - (a.has_transcript === 'true' ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at));
         const shortCalls = calls.filter(c => !c.duration || c.duration <= 300 || (!c.has_recording && !c.recording_url && c.has_transcript !== 'true'));
+        const withTranscript = reviewable.filter(c => c.has_transcript === 'true').length;
         const filterLabel = currentDateFilter === 'today' ? 'today' : currentDateFilter === 'week' ? 'this week' : '';
-        document.getElementById('calls-subtitle').textContent = `${calls.length} total calls${filterLabel ? ' ' + filterLabel : ''} · ${reviewable.length} reviewable (5+ min with recording)`;
+        document.getElementById('calls-subtitle').textContent = `${calls.length} eligible calls${filterLabel ? ' ' + filterLabel : ''} · ${withTranscript} ready for review (with transcript)`;
 
-        reviewable.slice(0, 30).forEach(call => {
+        reviewable.slice(0, 50).forEach(call => {
             const direction = call.direction || 'unknown';
             const duration = call.duration ? Math.round(call.duration / 60) : 0;
             const startedAt = call.created_at ? new Date(call.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'Unknown date';
             const phone = call.phone_number || call.raw_digits || '';
             const contactName = call.contact_name || call.company_name || '';
+            const hasTranscript = call.has_transcript === 'true';
             const li = document.createElement('li');
             li.className = 'call-item fade-in';
             li.innerHTML = `
                 <div class="call-icon ${direction}">${direction === 'inbound' ? '&#8615;' : '&#8613;'}</div>
                 <div class="call-info">
                     <div class="call-date">${escHtml(startedAt)}</div>
-                    <div class="call-meta">${escHtml(direction)} · ${escHtml(contactName || phone || 'Unknown')}${call.transcript_source === 'live' ? '<span style="color: var(--teal); font-weight: 600; margin-left: 6px;">LIVE</span>' : ''}</div>
+                    <div class="call-meta">${escHtml(direction)} · ${escHtml(contactName || phone || 'Unknown')}${hasTranscript ? '<span style="color: var(--teal); font-weight: 600; margin-left: 6px;">READY</span>' : '<span style="color: var(--gray-400); margin-left: 6px; font-size: 11px;">processing</span>'}</div>
                 </div>
                 <div class="call-duration">${duration} min</div>
             `;

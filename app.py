@@ -915,8 +915,10 @@ def fetch_eligible_calls(user_email: str, date_from: str) -> list:
                 c.recording,
                 c.asset,
                 c.contact.name as contact_name,
-                c.status
+                c.status,
+                CASE WHEN t.call_id IS NOT NULL THEN 'true' ELSE 'false' END as has_transcript
             FROM trilogycare_dev.aircall.calls c
+            LEFT JOIN trilogycare_dev.aircall.transcriptions t ON c.id = t.call_id
             WHERE c.user.email = '{user_email}'
             AND c.duration >= 300
             AND c.started_at >= TIMESTAMP '{date_from} 00:00:00'
@@ -943,6 +945,7 @@ def fetch_eligible_calls(user_email: str, date_from: str) -> list:
             asset = row[8] or ''
             contact_name = row[9] or ''
             status = row[10] or ''
+            has_transcript = row[11] if len(row) > 11 else 'false'
 
             if not raw_digits or raw_digits == 'anonymous':
                 continue
@@ -980,7 +983,7 @@ def fetch_eligible_calls(user_email: str, date_from: str) -> list:
                 'recording_url': recording or asset or '',
                 'asset': asset or f"https://assets.aircall.io/calls/{call_id}/recording",
                 'has_recording': bool(recording or asset),
-                'has_transcript': 'false',
+                'has_transcript': has_transcript,
                 'zoho_verified': True,
             }
             eligible_calls.append(call_obj)
