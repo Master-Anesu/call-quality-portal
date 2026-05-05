@@ -840,7 +840,12 @@ def fetch_eligible_calls(user_email: str, date_from: str) -> list:
     OR a deal was created for that phone on the same day as the call.
     Uses Databricks aircall.calls table which has actual caller phone (raw_digits).
     """
+    if not all([DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID]):
+        logger.error("Databricks credentials not configured — cannot fetch calls")
+        return []
+
     # Query 1: Get all 5+ min calls for this user from Databricks
+    logger.info("Fetching calls for %s from %s", user_email, date_from)
     calls_rows = query_databricks(f"""
         SELECT
             c.id,
@@ -861,6 +866,7 @@ def fetch_eligible_calls(user_email: str, date_from: str) -> list:
         ORDER BY c.started_at DESC
     """)
 
+    logger.info("Databricks returned %d calls for %s", len(calls_rows), user_email)
     if not calls_rows:
         return []
 
@@ -902,24 +908,31 @@ def fetch_eligible_calls(user_email: str, date_from: str) -> list:
                 continue
 
         # Build call object matching expected frontend format
-        duration_mins = round(int(duration) / 60, 1) if duration else 0
+        duration_int = int(duration) if duration else 0
+        duration_mins = round(duration_int / 60, 1)
+        # Format timestamps for JS parsing (add AEST offset if no timezone present)
+        fmt_started = started_at.replace(' ', 'T') + '+10:00' if started_at and '+' not in started_at and 'T' not in started_at else started_at
+        fmt_answered = answered_at.replace(' ', 'T') + '+10:00' if answered_at and '+' not in answered_at and 'T' not in answered_at else answered_at
+        fmt_ended = ended_at.replace(' ', 'T') + '+10:00' if ended_at and '+' not in ended_at and 'T' not in ended_at else ended_at
         call_obj = {
             'id': call_id,
             'call_id': call_id,
             'raw_digits': raw_digits,
+            'phone_number': raw_digits,
             'direction': direction,
-            'duration': int(duration) if duration else 0,
+            'duration': duration_int,
             'duration_minutes': duration_mins,
-            'created_at': started_at,
-            'started_at': started_at,
-            'answered_at': answered_at,
-            'ended_at': ended_at,
+            'created_at': fmt_started,
+            'started_at': fmt_started,
+            'answered_at': fmt_answered,
+            'ended_at': fmt_ended,
             'status': status,
             'contact_name': contact_name,
             'recording': recording,
             'recording_url': recording or asset or '',
-            'asset': asset,
+            'asset': asset or f"https://assets.aircall.io/calls/{call_id}/recording",
             'has_recording': bool(recording or asset),
+            'has_transcript': 'false',
             'zoho_verified': True,
         }
         eligible_calls.append(call_obj)

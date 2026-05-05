@@ -1985,9 +1985,9 @@
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                            <button class="btn btn-sm btn-teal" id="filter-today" onclick="filterCalls('today')">Today</button>
+                            <button class="btn btn-sm btn-outline" id="filter-today" onclick="filterCalls('today')">Today</button>
                             <button class="btn btn-sm btn-outline" id="filter-week" onclick="filterCalls('week')">This Week</button>
-                            <button class="btn btn-sm btn-outline" id="filter-all" onclick="filterCalls('all')">Last 90 Days</button>
+                            <button class="btn btn-sm btn-teal" id="filter-all" onclick="filterCalls('all')">Last 90 Days</button>
                         </div>
                         <p class="text-muted" id="calls-subtitle">Select the call to review</p>
                         <ul class="call-list" id="call-list"></ul>
@@ -2310,7 +2310,7 @@
         try { await loadCalls(emp.email); } catch (err) { document.getElementById('calls-subtitle').textContent = 'Failed to load calls: ' + err.message; }
     }
 
-    let currentDateFilter = 'today';
+    let currentDateFilter = 'all';
 
     function filterCalls(period) {
         currentDateFilter = period;
