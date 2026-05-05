@@ -379,6 +379,11 @@ def transcribe_recording(recording_url: str, call_id: str = '') -> str:
                 logger.info("Using cached recording for call %s", call_id)
                 tmp_path = cached
 
+        # If no URL provided but we have a call_id, fetch a fresh URL
+        if not tmp_path and not recording_url and call_id:
+            logger.info("No recording URL provided for call %s, fetching fresh URL...", call_id)
+            recording_url = get_fresh_recording_url(call_id)
+
         # Handle local file path
         if not tmp_path and recording_url and os.path.isfile(recording_url):
             tmp_path = recording_url
