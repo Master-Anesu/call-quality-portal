@@ -824,6 +824,8 @@ def health():
         'jobs_store': len(jobs),
         'databricks_configured': bool(DATABRICKS_HOST and DATABRICKS_TOKEN and DATABRICKS_WAREHOUSE_ID),
         'databricks_host': DATABRICKS_HOST[:30] + '...' if DATABRICKS_HOST else 'NOT SET',
+        'groq_configured': bool(GROQ_API_KEY),
+        'mcp_configured': bool(MCP_API_KEY),
     })
 
 
@@ -1326,16 +1328,16 @@ def run_review_pipeline(job_id: str, data: dict):
             # If no stored transcript, transcribe from recording (live via Groq Whisper)
             if not transcript_text and (recording_url or call_id):
                 jobs[job_id]['message'] = 'No stored transcript — transcribing from recording...'
-                logger.info('No transcript in API for call %s, transcribing recording live', call_id)
+                logger.info('No transcript in API for call %s, attempting live transcription (recording_url=%s, call_id=%s)',
+                            call_id, bool(recording_url), call_id)
                 transcript_text = transcribe_recording(recording_url, call_id=str(call_id) if call_id else '')
 
             if not transcript_text:
                 if not GROQ_API_KEY:
                     msg = 'Transcription service not configured (GROQ_API_KEY missing). Transcripts are batched at 6am — try again tomorrow or upload a transcript file.'
-                elif not recording_url:
-                    msg = 'No recording found for this call. The call may be too recent or recording was not enabled.'
                 else:
-                    msg = 'Could not transcribe the recording. The signed recording URL has expired. Please try selecting the call again.'
+                    msg = 'Could not get transcript for this call. The recording may still be processing — try again in a few minutes, or select an older call.'
+                logger.error('No transcript available for call %s', call_id)
                 jobs[job_id] = {'status': 'error', 'message': msg, 'result': None, 'error': 'No transcript'}
                 return
 
