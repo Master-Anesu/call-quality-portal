@@ -842,6 +842,56 @@ def get_aircall_users():
     return jsonify(result)
 
 
+def fetch_all_calls_paginated(user_email: str, date_from: str) -> list:
+    """Fetch all calls using date-range chunking to work around 100-call API limit.
+    Splits the range into 5-day windows and fetches in parallel."""
+    from_date = datetime.strptime(date_from, '%Y-%m-%d')
+    to_date = datetime.now()
+    total_days = (to_date - from_date).days
+
+    if total_days <= 3:
+        result = call_mcp_tool('list_aircall_calls', {
+            'user_email': user_email, 'limit': 100, 'date_from': date_from,
+        })
+        return _parse_aircall_calls(result)
+
+    # Split into 5-day chunks
+    chunk_days = 5
+    chunks = []
+    current = from_date
+    while current < to_date:
+        chunk_end = min(current + timedelta(days=chunk_days), to_date)
+        chunks.append((current.strftime('%Y-%m-%d'), chunk_end.strftime('%Y-%m-%d')))
+        current = chunk_end
+
+    all_calls = []
+    seen_ids = set()
+
+    def fetch_chunk(chunk_from, chunk_to):
+        args = {'user_email': user_email, 'limit': 100, 'date_from': chunk_from}
+        if chunk_to != to_date.strftime('%Y-%m-%d'):
+            args['date_to'] = chunk_to
+        return call_mcp_tool('list_aircall_calls', args)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(fetch_chunk, cf, ct) for cf, ct in chunks]
+        for future in futures:
+            try:
+                result = future.result()
+                chunk_calls = _parse_aircall_calls(result)
+                for c in chunk_calls:
+                    cid = c.get('id') or c.get('call_id') or ''
+                    if cid and cid not in seen_ids:
+                        seen_ids.add(cid)
+                        all_calls.append(c)
+                    elif not cid:
+                        all_calls.append(c)
+            except Exception as e:
+                logger.warning("Failed to fetch call chunk: %s", e)
+
+    return all_calls
+
+
 @app.route('/api/calls', methods=['POST'])
 def get_calls():
     """Get recent calls for an Aircall user by email with date filter support."""
@@ -857,13 +907,7 @@ def get_calls():
     else:
         date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
 
-    result = call_mcp_tool('list_aircall_calls', {
-        'user_email': user_email,
-        'limit': 200,
-        'date_from': date_from,
-    })
-
-    all_calls = _parse_aircall_calls(result)
+    all_calls = fetch_all_calls_paginated(user_email, date_from)
 
     # Get eligible phone numbers (active/allocated leads + contacts + deals)
     eligible_phones = get_eligible_phones()
