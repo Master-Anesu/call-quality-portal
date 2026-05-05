@@ -1358,13 +1358,16 @@ TRANSCRIPT:
 Score each dimension 1-10 based on the rubric. Be specific and reference real moments from the transcript. Return valid JSON only."""
 
         try:
-            llm_response = call_llm(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=4000)
+            llm_response = call_llm(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=6000)
+            logger.info("LLM response length: %d chars, first 200: %s", len(llm_response), llm_response[:200])
             review_json = parse_json_from_response(llm_response)
         except Exception as e:
+            logger.error("LLM scoring exception: %s", e)
             jobs[job_id] = {'status': 'error', 'message': f"LLM scoring failed: {str(e)}", 'result': None, 'error': str(e)}
             return
 
         if not review_json or not review_json.get('scores'):
+            logger.error("LLM returned invalid JSON. Raw response (first 500): %s", llm_response[:500] if llm_response else 'EMPTY')
             jobs[job_id] = {'status': 'error', 'message': 'LLM returned invalid or incomplete JSON. Please retry.', 'result': None, 'error': 'Invalid JSON from LLM'}
             return
 
