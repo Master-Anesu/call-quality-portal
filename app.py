@@ -334,40 +334,72 @@ def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> st
 # ---------------------------------------------------------------------------
 
 SCORING_SYSTEM_PROMPT = """You are a call quality reviewer for Trilogy Care, an Australian aged care provider.
-You score sales/onboarding calls on 8 dimensions. This is a coaching tool, not a performance audit.
+You score sales/onboarding calls across 4 stages of a sales call. This is a coaching tool, not a performance audit.
 Be specific — ground every score and comment in a real moment from the transcript.
 
-Scoring benchmark: top-performer Aprocina Anthony's conversational style.
-Core question for every dimension: "Did this part of the conversation make the caller feel closer to saying yes?"
+Scoring benchmark: top-performer Aprocina Anthony's conversational style — the way she builds trust, reads callers, and makes progress feel natural.
+Core question for every stage: "Did this part of the conversation move the caller closer to a confident yes?"
+
+The call is scored across 4 stages with these weightings:
+- Introduction (15 points / 15%): Sets the tone
+- Discovery (35 points / 35%): The foundation — everything else depends on this
+- Pitch (35 points / 35%): Where value is communicated and trust is built
+- Close (15 points / 15%): Seals what was already earned
 
 Return your response as valid JSON with this exact structure:
 {
   "client_name": "the client/caller's full name as identified from the transcript",
-  "call_story": "2-3 sentence narrative of who called, why, what happened, how it ended",
-  "outcome": "brief outcome description",
-  "highlights": ["5-8 specific moments where the rep's conversation skills made a difference"],
-  "growth_opportunities": [
-    {"moment": "what happened", "opportunity": "what could be different", "why_it_matters": "impact on caller experience"}
-  ],
   "scores": {
-    "rapport": {"score": 0, "comment": "specific feedback"},
-    "opening": {"score": 0, "comment": "specific feedback"},
-    "reading_the_room": {"score": 0, "comment": "specific feedback"},
-    "discovery": {"score": 0, "comment": "specific feedback"},
-    "making_value_real": {"score": 0, "comment": "specific feedback"},
-    "navigating_resistance": {"score": 0, "comment": "specific feedback"},
-    "guiding_to_action": {"score": 0, "comment": "specific feedback"},
-    "confidence_knowledge": {"score": 0, "comment": "specific feedback"}
+    "introduction": {
+      "total": 0,
+      "sub_scores": {
+        "warm_greeting": {"score": 0, "max": 5, "comment": "specific feedback"},
+        "clear_introduction": {"score": 0, "max": 5, "comment": "specific feedback"},
+        "purpose_statement": {"score": 0, "max": 5, "comment": "specific feedback"}
+      },
+      "feedback": "2-3 sentence paragraph — what the rep did well or missed, specific moments, how it affected discovery"
+    },
+    "discovery": {
+      "total": 0,
+      "sub_scores": {
+        "current_care_situation": {"score": 0, "max": 8, "comment": "specific feedback"},
+        "biggest_challenge": {"score": 0, "max": 8, "comment": "specific feedback"},
+        "impact_on_daily_life": {"score": 0, "max": 7, "comment": "specific feedback"},
+        "ideal_care_vision": {"score": 0, "max": 6, "comment": "specific feedback"},
+        "timeline_urgency": {"score": 0, "max": 6, "comment": "specific feedback"}
+      },
+      "triggers_identified": ["list of triggers the rep uncovered, or note what was missed"],
+      "feedback": "3-4 sentence paragraph — did the rep uncover 3 clear triggers? How did this affect the pitch?"
+    },
+    "pitch": {
+      "total": 0,
+      "sub_scores": {
+        "trigger_recap": {"score": 0, "max": 8, "comment": "specific feedback"},
+        "solution_alignment": {"score": 0, "max": 10, "comment": "specific feedback"},
+        "relevant_services": {"score": 0, "max": 9, "comment": "specific feedback"},
+        "comprehension_check": {"score": 0, "max": 8, "comment": "specific feedback"}
+      },
+      "feedback": "3-4 sentence paragraph — was the pitch built on triggers or generic? Tie back to discovery."
+    },
+    "close": {
+      "total": 0,
+      "sub_scores": {
+        "closing_question": {"score": 0, "max": 4, "comment": "specific feedback"},
+        "pause_and_listen": {"score": 0, "max": 3, "comment": "specific feedback"},
+        "objection_handling": {"score": 0, "max": 4, "comment": "specific feedback"},
+        "next_steps_confirmed": {"score": 0, "max": 4, "comment": "specific feedback"}
+      },
+      "closing_technique": "process / pricing / alternate / assumptive",
+      "feedback": "2-3 sentence paragraph — was the close confident or hesitant? Trace back to earlier stages if needed."
+    }
   },
+  "stage_flow": "3-4 sentence paragraph connecting the dots across all four stages — where momentum built or broke down",
+  "focus_on": "one sentence — the single most important thing for the rep to work on next",
   "top_strength": "the one thing this rep should keep doing",
-  "top_development_area": "the one thing that would make the biggest difference",
-  "coaching_recommendations": ["2-3 specific, actionable suggestions"]
+  "top_development_area": "the one thing that would make the biggest difference"
 }
 
-Scoring scales:
-- Rapport & Human Connection: 1-10 (weighted 2x, so max 20 points)
-- All other dimensions: 1-10 (max 10 points each)
-Total max: 90 points
+Total max: 100 points (Introduction /15 + Discovery /35 + Pitch /35 + Close /15)
 
 Grade scale:
 A+ = 90-100%, A = 80-89%, B = 70-79%, C = 60-69%, D = below 60%
@@ -394,36 +426,9 @@ def generate_word_doc(review_data: dict) -> str:
 
     doc = Document()
 
-    # Cover page
-    for _ in range(4):
-        doc.add_paragraph('')
-    title_para = doc.add_paragraph()
-    title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run = title_para.add_run('Call Quality Review')
-    title_run.font.size = Pt(36)
-    title_run.font.color.rgb = NAVY
-    title_run.font.name = 'Aptos'
-    title_run.bold = True
-
-    subtitle_para = doc.add_paragraph()
-    subtitle_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    sub_run = subtitle_para.add_run(f"{review_data['rep_name']} — {review_data['rep_role']}")
-    sub_run.font.size = Pt(18)
-    sub_run.font.color.rgb = DARK_TEAL
-    sub_run.font.name = 'Aptos'
-
-    tagline_para = doc.add_paragraph()
-    tagline_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    tag_run = tagline_para.add_run('Conversation Deep-Dive')
-    tag_run.font.size = Pt(14)
-    tag_run.font.color.rgb = TEAL
-    tag_run.font.name = 'Aptos'
-    tag_run.italic = True
-
-    doc.add_page_break()
-
-    # Header block
     today_str = datetime.now().strftime('%d %B %Y')
+
+    # Header block (no cover page per spec)
     header_data = [
         ['Agent', f"{review_data['rep_name']} — {review_data.get('est_id', '')} {review_data['rep_role']}"],
         ['Department', 'CSR'],
@@ -457,102 +462,127 @@ def generate_word_doc(review_data: dict) -> str:
 
     doc.add_paragraph('')
 
-    # Call overview with score
+    # Calculate totals
     scores = review_data.get('scores', {})
-    total_points = scores.get('rapport', {}).get('score', 0) * 2
-    for dim in ['opening', 'reading_the_room', 'discovery', 'making_value_real', 'navigating_resistance', 'guiding_to_action', 'confidence_knowledge']:
-        total_points += scores.get(dim, {}).get('score', 0)
-    percentage = round((total_points / 90) * 100, 1) if total_points else 0
-    overall_score = round(total_points / 9, 1)
+    intro_total = scores.get('introduction', {}).get('total', 0)
+    discovery_total = scores.get('discovery', {}).get('total', 0)
+    pitch_total = scores.get('pitch', {}).get('total', 0)
+    close_total = scores.get('close', {}).get('total', 0)
+    total_points = intro_total + discovery_total + pitch_total + close_total
+    percentage = round((total_points / 100) * 100, 1) if total_points else 0
 
-    h1 = doc.add_heading(f"{review_data.get('client_name', 'Unknown')} — {review_data.get('call_date', '')} — Score: {overall_score}/10", level=1)
+    if percentage >= 90:
+        grade = 'A+'
+    elif percentage >= 80:
+        grade = 'A'
+    elif percentage >= 70:
+        grade = 'B'
+    elif percentage >= 60:
+        grade = 'C'
+    else:
+        grade = 'D'
+
+    # Section 1: Stage-by-Stage Feedback
+    h1 = doc.add_heading('Stage-by-Stage Feedback', level=1)
     for run in h1.runs:
         run.font.color.rgb = NAVY
 
-    meta_line = f"{review_data.get('direction', '')} | {review_data.get('duration', '')} minutes | Outcome: {review_data.get('outcome', 'N/A')}"
-    meta_para = doc.add_paragraph(meta_line)
-    for run in meta_para.runs:
-        run.font.size = Pt(10)
-        run.font.color.rgb = DARK_TEAL
-        run.font.name = 'Aptos'
-
-    # The Story
-    h2 = doc.add_heading('The Story', level=2)
+    # Introduction
+    h2 = doc.add_heading(f"Introduction ({intro_total}/15)", level=2)
     for run in h2.runs:
         run.font.color.rgb = NAVY
-    story_para = doc.add_paragraph(review_data.get('call_story', ''))
-    for run in story_para.runs:
-        run.font.name = 'Aptos'
-        run.font.size = Pt(11)
-
-    # Highlights
-    h2 = doc.add_heading('What Worked — Conversation Highlights', level=2)
-    for run in h2.runs:
-        run.font.color.rgb = NAVY
-    for highlight in review_data.get('highlights', []):
-        p = doc.add_paragraph(highlight, style='List Bullet')
+    intro_feedback = scores.get('introduction', {}).get('feedback', '')
+    if intro_feedback:
+        p = doc.add_paragraph(intro_feedback)
         for run in p.runs:
             run.font.name = 'Aptos'
             run.font.size = Pt(11)
 
-    # Growth opportunities
-    h2 = doc.add_heading('Where to Level Up — Growth Opportunities', level=2)
+    # Discovery
+    h2 = doc.add_heading(f"Discovery ({discovery_total}/35)", level=2)
     for run in h2.runs:
         run.font.color.rgb = NAVY
-    for opp in review_data.get('growth_opportunities', []):
-        if isinstance(opp, dict):
-            p = doc.add_paragraph('', style='List Bullet')
-            run_moment = p.add_run('The moment: ')
-            run_moment.bold = True
-            run_moment.font.name = 'Aptos'
-            run_moment.font.size = Pt(11)
-            run_moment.font.color.rgb = NAVY
-            run_text = p.add_run(opp.get('moment', ''))
-            run_text.font.name = 'Aptos'
-            run_text.font.size = Pt(11)
+    disc_feedback = scores.get('discovery', {}).get('feedback', '')
+    if disc_feedback:
+        p = doc.add_paragraph(disc_feedback)
+        for run in p.runs:
+            run.font.name = 'Aptos'
+            run.font.size = Pt(11)
+    triggers = scores.get('discovery', {}).get('triggers_identified', [])
+    if triggers:
+        p = doc.add_paragraph('')
+        run_label = p.add_run('Triggers identified: ')
+        run_label.bold = True
+        run_label.font.name = 'Aptos'
+        run_label.font.size = Pt(11)
+        run_label.font.color.rgb = NAVY
+        run_text = p.add_run(', '.join(triggers) if isinstance(triggers, list) else str(triggers))
+        run_text.font.name = 'Aptos'
+        run_text.font.size = Pt(11)
 
-            p2 = doc.add_paragraph('', style='List Bullet 2')
-            run_opp = p2.add_run('The opportunity: ')
-            run_opp.bold = True
-            run_opp.font.name = 'Aptos'
-            run_opp.font.size = Pt(11)
-            run_opp.font.color.rgb = TEAL
-            run_text2 = p2.add_run(opp.get('opportunity', ''))
-            run_text2.font.name = 'Aptos'
-            run_text2.font.size = Pt(11)
-
-            p3 = doc.add_paragraph('', style='List Bullet 2')
-            run_why = p3.add_run('Why it matters: ')
-            run_why.bold = True
-            run_why.font.name = 'Aptos'
-            run_why.font.size = Pt(11)
-            run_text3 = p3.add_run(opp.get('why_it_matters', ''))
-            run_text3.font.name = 'Aptos'
-            run_text3.font.size = Pt(11)
-        else:
-            doc.add_paragraph(str(opp), style='List Bullet')
-
-    # Score table
-    h2 = doc.add_heading('Overall Assessment', level=2)
+    # Pitch
+    h2 = doc.add_heading(f"Pitch ({pitch_total}/35)", level=2)
     for run in h2.runs:
         run.font.color.rgb = NAVY
+    pitch_feedback = scores.get('pitch', {}).get('feedback', '')
+    if pitch_feedback:
+        p = doc.add_paragraph(pitch_feedback)
+        for run in p.runs:
+            run.font.name = 'Aptos'
+            run.font.size = Pt(11)
 
-    dim_labels = {
-        'rapport': ('Rapport & Human Connection', '2x'),
-        'opening': ('Opening & Setting the Scene', '1x'),
-        'reading_the_room': ('Reading the Room', '1x'),
-        'discovery': ('Conversational Discovery', '1x'),
-        'making_value_real': ('Making Value Real', '1x'),
-        'navigating_resistance': ('Navigating Resistance', '1x'),
-        'guiding_to_action': ('Guiding to Action', '1x'),
-        'confidence_knowledge': ('Confidence & Knowledge', '1x'),
-    }
+    # Close
+    h2 = doc.add_heading(f"Close ({close_total}/15)", level=2)
+    for run in h2.runs:
+        run.font.color.rgb = NAVY
+    close_feedback = scores.get('close', {}).get('feedback', '')
+    if close_feedback:
+        p = doc.add_paragraph(close_feedback)
+        for run in p.runs:
+            run.font.name = 'Aptos'
+            run.font.size = Pt(11)
+    close_technique = scores.get('close', {}).get('closing_technique', '')
+    if close_technique:
+        p = doc.add_paragraph('')
+        run_label = p.add_run('Closing technique: ')
+        run_label.bold = True
+        run_label.font.name = 'Aptos'
+        run_label.font.size = Pt(11)
+        run_label.font.color.rgb = NAVY
+        run_text = p.add_run(close_technique)
+        run_text.font.name = 'Aptos'
+        run_text.font.size = Pt(11)
 
-    score_table = doc.add_table(rows=len(dim_labels) + 2, cols=4)
+    # Stage Flow
+    h2 = doc.add_heading('Stage Flow', level=2)
+    for run in h2.runs:
+        run.font.color.rgb = NAVY
+    stage_flow = review_data.get('stage_flow', '')
+    if stage_flow:
+        p = doc.add_paragraph(stage_flow)
+        for run in p.runs:
+            run.font.name = 'Aptos'
+            run.font.size = Pt(11)
+
+    doc.add_paragraph('')
+
+    # Section 2: Score Card
+    h1 = doc.add_heading('Score Card', level=1)
+    for run in h1.runs:
+        run.font.color.rgb = NAVY
+
+    stage_rows = [
+        ('Introduction', '15%', f"{intro_total}/15"),
+        ('Discovery', '35%', f"{discovery_total}/35"),
+        ('Pitch', '35%', f"{pitch_total}/35"),
+        ('Close', '15%', f"{close_total}/15"),
+    ]
+
+    score_table = doc.add_table(rows=len(stage_rows) + 2, cols=3)
     score_table.style = 'Table Grid'
     score_table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-    headers = ['#', 'Dimension', 'Score', 'Weighted']
+    headers = ['Stage', 'Weight', 'Score']
     for j, h_text in enumerate(headers):
         cell = score_table.cell(0, j)
         cell.text = ''
@@ -567,15 +597,9 @@ def generate_word_doc(review_data: dict) -> str:
         })
         shading.append(shading_elem)
 
-    total_weighted = 0
-    for i, (key, (label, weight)) in enumerate(dim_labels.items(), start=1):
-        score_val = scores.get(key, {}).get('score', 0)
-        multiplier = 2 if key == 'rapport' else 1
-        weighted = score_val * multiplier
-        total_weighted += weighted
-
+    for i, (stage_name, weight, score_str) in enumerate(stage_rows, start=1):
         row = score_table.row_cells(i)
-        values = [str(i), label, f"{score_val}/10", f"{weighted}/{10 * multiplier}"]
+        values = [stage_name, weight, score_str]
         for j, val in enumerate(values):
             row[j].text = ''
             run = row[j].paragraphs[0].add_run(val)
@@ -589,20 +613,8 @@ def generate_word_doc(review_data: dict) -> str:
                 shading.append(shading_elem)
 
     # Total row
-    total_row = score_table.row_cells(len(dim_labels) + 1)
-    total_pct = round((total_weighted / 90) * 100, 1)
-    if total_pct >= 90:
-        grade = 'A+'
-    elif total_pct >= 80:
-        grade = 'A'
-    elif total_pct >= 70:
-        grade = 'B'
-    elif total_pct >= 60:
-        grade = 'C'
-    else:
-        grade = 'D'
-
-    total_values = ['', 'TOTAL', f"{total_weighted}/90", f"{total_pct}% ({grade})"]
+    total_row = score_table.row_cells(len(stage_rows) + 1)
+    total_values = ['Total', '100%', f"{total_points}/100 — {grade}"]
     for j, val in enumerate(total_values):
         total_row[j].text = ''
         run = total_row[j].paragraphs[0].add_run(val)
@@ -618,30 +630,17 @@ def generate_word_doc(review_data: dict) -> str:
 
     doc.add_paragraph('')
 
-    # Top strength
-    h3 = doc.add_heading('Top Strength', level=3)
-    for run in h3.runs:
-        run.font.color.rgb = DARK_TEAL
-    p = doc.add_paragraph(review_data.get('top_strength', ''))
-    for run in p.runs:
-        run.font.name = 'Aptos'
-
-    # Top development area
-    h3 = doc.add_heading('Top Development Area', level=3)
-    for run in h3.runs:
+    # Section 3: Focus On
+    h1 = doc.add_heading('Focus On', level=1)
+    for run in h1.runs:
         run.font.color.rgb = NAVY
-    p = doc.add_paragraph(review_data.get('top_development_area', ''))
-    for run in p.runs:
-        run.font.name = 'Aptos'
-
-    # Coaching recommendations
-    h3 = doc.add_heading('Coaching Recommendations', level=3)
-    for run in h3.runs:
-        run.font.color.rgb = NAVY
-    for rec in review_data.get('coaching_recommendations', []):
-        p = doc.add_paragraph(rec, style='List Bullet')
+    focus_on = review_data.get('focus_on', '')
+    if focus_on:
+        p = doc.add_paragraph(focus_on)
         for run in p.runs:
             run.font.name = 'Aptos'
+            run.font.size = Pt(12)
+            run.bold = True
 
     # Footer
     doc.add_paragraph('')
@@ -674,8 +673,8 @@ def generate_word_doc(review_data: dict) -> str:
     review_data['filename'] = filename
     review_data['filepath'] = filepath
     review_data['grade'] = grade
-    review_data['total_points'] = total_weighted
-    review_data['percentage'] = total_pct
+    review_data['total_points'] = total_points
+    review_data['percentage'] = percentage
 
     return filepath
 
@@ -1062,7 +1061,7 @@ def run_review_pipeline(job_id: str, data: dict):
                 resolved_client = extract_client_name(raw) or client_name
 
         # Step 2: Score with LLM
-        jobs[job_id]['message'] = 'AI is scoring the call across 8 dimensions...'
+        jobs[job_id]['message'] = 'AI is scoring the call across 4 stages...'
 
         scoring_prompt = f"""Score this call quality review.
 
@@ -1109,14 +1108,11 @@ Score each dimension 1-10 based on the rubric. Be specific and reference real mo
             'duration': call_duration,
             'client_name': resolved_client,
             'client_phone': client_phone,
-            'call_story': review_json.get('call_story', ''),
-            'outcome': review_json.get('outcome', ''),
-            'highlights': review_json.get('highlights', []),
-            'growth_opportunities': review_json.get('growth_opportunities', []),
             'scores': review_json.get('scores', {}),
+            'stage_flow': review_json.get('stage_flow', ''),
+            'focus_on': review_json.get('focus_on', ''),
             'top_strength': review_json.get('top_strength', ''),
             'top_development_area': review_json.get('top_development_area', ''),
-            'coaching_recommendations': review_json.get('coaching_recommendations', []),
         }
 
         try:

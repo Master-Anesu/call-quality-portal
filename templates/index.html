@@ -638,15 +638,15 @@
                 <div class="card-title mt-20">Score Breakdown</div>
                 <div class="scores-grid" id="scores-grid"></div>
 
-                <!-- Highlights -->
-                <div class="card-title mt-20">Highlights</div>
-                <ul id="highlights-list" style="padding-left: 20px; margin-top: 8px;"></ul>
+                <!-- Stage Flow -->
+                <div class="card-title mt-20">Stage Flow</div>
+                <ul id="highlights-list" style="padding-left: 0; margin-top: 8px;"></ul>
 
-                <!-- Top strength & development -->
+                <!-- Top strength & focus -->
                 <div class="card-title mt-20">Top Strength</div>
                 <p id="top-strength" style="margin-top: 4px; color: var(--gray-700);"></p>
 
-                <div class="card-title mt-20">Top Development Area</div>
+                <div class="card-title mt-20">Focus On</div>
                 <p id="top-dev" style="margin-top: 4px; color: var(--gray-700);"></p>
 
                 <div class="mt-20" style="display: flex; gap: 12px;">
@@ -1169,7 +1169,7 @@
             let elapsed = 0;
             const stepMessages = [
                 { at: 0, msg: 'Fetching call transcript...', pct: 10 },
-                { at: 6, msg: 'AI is scoring the call across 8 dimensions...', pct: 30 },
+                { at: 6, msg: 'AI is scoring across 4 stages...', pct: 30 },
                 { at: 14, msg: 'Still scoring — analysing conversation quality...', pct: 50 },
                 { at: 24, msg: 'Almost there — finalising scores...', pct: 70 },
                 { at: 40, msg: 'Generating Word document...', pct: 85 },
@@ -1259,47 +1259,52 @@
         // Grade
         document.getElementById('grade-value').textContent = data.grade || '--';
         document.getElementById('grade-detail').textContent =
-            `${data.total_points || 0}/90 points · ${data.percentage || 0}%`;
+            `${data.total_points || 0}/100 points · ${data.percentage || 0}%`;
 
-        // Scores grid
+        // Scores grid — 4-stage model
         const grid = document.getElementById('scores-grid');
         grid.innerHTML = '';
-        const dimLabels = {
-            rapport: 'Rapport (2x)',
-            opening: 'Opening',
-            reading_the_room: 'Reading the Room',
-            discovery: 'Discovery',
-            making_value_real: 'Making Value Real',
-            navigating_resistance: 'Navigating Resistance',
-            guiding_to_action: 'Guiding to Action',
-            confidence_knowledge: 'Confidence',
-        };
-        for (const [key, label] of Object.entries(dimLabels)) {
-            const score = data.scores?.[key]?.score || 0;
-            const cls = score >= 8 ? 'score-high' : score >= 6 ? 'score-mid' : 'score-low';
+        const stages = [
+            { key: 'introduction', label: 'Introduction', max: 15, weight: '15%' },
+            { key: 'discovery', label: 'Discovery', max: 35, weight: '35%' },
+            { key: 'pitch', label: 'Pitch', max: 35, weight: '35%' },
+            { key: 'close', label: 'Close', max: 15, weight: '15%' },
+        ];
+        for (const stage of stages) {
+            const total = data.scores?.[stage.key]?.total || 0;
+            const pct = Math.round((total / stage.max) * 100);
+            const cls = pct >= 80 ? 'score-high' : pct >= 60 ? 'score-mid' : 'score-low';
             const div = document.createElement('div');
             div.className = 'score-item';
             div.innerHTML = `
-                <span class="score-label">${label}</span>
-                <span class="score-value ${cls}">${score}/10</span>
+                <span class="score-label">${stage.label} <span style="opacity:0.5;font-size:11px;">(${stage.weight})</span></span>
+                <span class="score-value ${cls}">${total}/${stage.max}</span>
             `;
-            div.title = data.scores?.[key]?.comment || '';
+            div.title = data.scores?.[stage.key]?.feedback || '';
             grid.appendChild(div);
         }
 
-        // Highlights
+        // Stage flow
         const hlList = document.getElementById('highlights-list');
         hlList.innerHTML = '';
-        (data.highlights || []).forEach(h => {
+        if (data.stage_flow) {
             const li = document.createElement('li');
-            li.textContent = h;
-            li.style.cssText = 'margin-bottom: 6px; font-size: 14px; color: var(--gray-700); line-height: 1.5;';
+            li.textContent = data.stage_flow;
+            li.style.cssText = 'margin-bottom: 6px; font-size: 14px; color: var(--gray-700); line-height: 1.5; list-style: none;';
             hlList.appendChild(li);
-        });
+        }
+        // Discovery triggers
+        const triggers = data.scores?.discovery?.triggers_identified;
+        if (triggers && triggers.length) {
+            const li = document.createElement('li');
+            li.innerHTML = `<strong style="color:var(--navy)">Triggers identified:</strong> ${escHtml(triggers.join(', '))}`;
+            li.style.cssText = 'margin-bottom: 6px; font-size: 14px; color: var(--gray-700); line-height: 1.5; list-style: none;';
+            hlList.appendChild(li);
+        }
 
-        // Top strength / dev
+        // Top strength / dev / focus
         document.getElementById('top-strength').textContent = data.top_strength || '';
-        document.getElementById('top-dev').textContent = data.top_development_area || '';
+        document.getElementById('top-dev').textContent = data.focus_on || data.top_development_area || '';
 
         // Download link
         if (data.filename) {

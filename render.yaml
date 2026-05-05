@@ -24,5 +24,13 @@ services:
         sync: false
       - key: AZURE_AD_CLIENT_SECRET
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: DATABRICKS_HOST
+        sync: false
+      - key: DATABRICKS_TOKEN
+        sync: false
+      - key: DATABRICKS_WAREHOUSE_ID
+        sync: false
       - key: PYTHON_VERSION
         value: "3.11.11"
