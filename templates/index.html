@@ -909,6 +909,11 @@
                 <span class="nav-icon">&#9632;</span>
                 Dashboard
             </div>
+            <div class="nav-item" onclick="switchPage('at-risk')">
+                <span class="nav-icon">&#9888;</span>
+                At Risk
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Stages</div>
@@ -1122,6 +1127,183 @@
                             <div class="review-score" style="color: var(--orange);">73%</div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PAGE: At Risk ===== -->
+        <div class="page" id="page-at-risk">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Live At Risk Monitoring Coming Soon
+                    <small>Reps averaging below 70% will be flagged automatically as calls are reviewed</small>
+                </div>
+            </div>
+
+            <!-- At Risk summary -->
+            <div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;">
+                <div class="kpi-card kpi-orange">
+                    <div class="kpi-label">At Risk Reps</div>
+                    <div class="kpi-value">8</div>
+                    <div class="kpi-sub">averaging below 70%</div>
+                </div>
+                <div class="kpi-card kpi-navy">
+                    <div class="kpi-label">Avg Score (At Risk)</div>
+                    <div class="kpi-value">62%</div>
+                    <div class="kpi-sub">across flagged reps</div>
+                </div>
+                <div class="kpi-card kpi-teal">
+                    <div class="kpi-label">Most Common Gap</div>
+                    <div class="kpi-value" style="font-size: 24px;">Discovery</div>
+                    <div class="kpi-sub">weakest stage on average</div>
+                </div>
+            </div>
+
+            <!-- At Risk table -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Reps Below 70% Average</div>
+                    <div style="font-size: 12px; color: var(--red); font-weight: 600;">Requires coaching support</div>
+                </div>
+                <div class="card-body card-body-flush">
+                    <table class="lb-table">
+                        <thead>
+                            <tr>
+                                <th>Rep</th>
+                                <th>Team</th>
+                                <th>Avg Score</th>
+                                <th>Intro</th>
+                                <th>Discovery</th>
+                                <th>Pitch</th>
+                                <th>Close</th>
+                                <th>Reviews</th>
+                                <th>Trend</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="lb-name">Sophie Farrow</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Deal Demons</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:69%"></div></div><span class="lb-score-num" style="color:var(--orange);">69</span></div></td>
+                                <td>10</td>
+                                <td>24</td>
+                                <td>24</td>
+                                <td>11</td>
+                                <td>5</td>
+                                <td><span class="kpi-trend down">&#9660; 3%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Matthew Farrelly</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Deal Demons</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:68%"></div></div><span class="lb-score-num" style="color:var(--orange);">68</span></div></td>
+                                <td>10</td>
+                                <td>23</td>
+                                <td>24</td>
+                                <td>11</td>
+                                <td>7</td>
+                                <td><span class="kpi-trend down">&#9660; 2%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Adam Hughes</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Deal Demons</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:67%"></div></div><span class="lb-score-num" style="color:var(--orange);">67</span></div></td>
+                                <td>10</td>
+                                <td>23</td>
+                                <td>23</td>
+                                <td>11</td>
+                                <td>4</td>
+                                <td><span class="kpi-trend down">&#9660; 5%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Hazeldean Jackson</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Top Dogs</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:66%"></div></div><span class="lb-score-num" style="color:var(--orange);">66</span></div></td>
+                                <td>10</td>
+                                <td>22</td>
+                                <td>23</td>
+                                <td>11</td>
+                                <td>5</td>
+                                <td><span class="kpi-trend down">&#9660; 1%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Telesia Mau'u</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Top Dogs</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:65%"></div></div><span class="lb-score-num" style="color:var(--orange);">65</span></div></td>
+                                <td>9</td>
+                                <td>22</td>
+                                <td>23</td>
+                                <td>11</td>
+                                <td>4</td>
+                                <td><span class="kpi-trend down">&#9660; 4%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Hunter Goodfellow</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Deal Demons</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:64%"></div></div><span class="lb-score-num" style="color:var(--red);">64</span></div></td>
+                                <td>9</td>
+                                <td>22</td>
+                                <td>22</td>
+                                <td>11</td>
+                                <td>3</td>
+                                <td><span class="kpi-trend down">&#9660; 6%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Bonheur Chala</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Deal Demons</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:63%"></div></div><span class="lb-score-num" style="color:var(--red);">63</span></div></td>
+                                <td>9</td>
+                                <td>22</td>
+                                <td>21</td>
+                                <td>11</td>
+                                <td>4</td>
+                                <td><span class="kpi-trend down">&#9660; 2%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Ehtisham Muhammad Mehdi</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Top Dogs</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:62%"></div></div><span class="lb-score-num" style="color:var(--red);">62</span></div></td>
+                                <td>9</td>
+                                <td>21</td>
+                                <td>21</td>
+                                <td>11</td>
+                                <td>3</td>
+                                <td><span class="kpi-trend down">&#9660; 3%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Luke Saito</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Deal Demons</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:58%"></div></div><span class="lb-score-num" style="color:var(--red);">58</span></div></td>
+                                <td>8</td>
+                                <td>20</td>
+                                <td>20</td>
+                                <td>10</td>
+                                <td>4</td>
+                                <td><span class="kpi-trend down">&#9660; 7%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Ewan Gillespie</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Top Dogs</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:55%"></div></div><span class="lb-score-num" style="color:var(--red);">55</span></div></td>
+                                <td>8</td>
+                                <td>19</td>
+                                <td>18</td>
+                                <td>10</td>
+                                <td>3</td>
+                                <td><span class="kpi-trend down">&#9660; 4%</span></td>
+                            </tr>
+                            <tr>
+                                <td class="lb-name">Cody Lilley</td>
+                                <td><span style="font-size:12px; color: var(--gray-500);">Top Dogs</span></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:52%"></div></div><span class="lb-score-num" style="color:var(--red);">52</span></div></td>
+                                <td>7</td>
+                                <td>18</td>
+                                <td>18</td>
+                                <td>9</td>
+                                <td>2</td>
+                                <td><span class="kpi-trend down">&#9660; 8%</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1920,6 +2102,7 @@
 
         const titles = {
             'dashboard': 'Quality Dashboard',
+            'at-risk': 'At Risk',
             'teams': 'Team Comparison',
             'leaderboard': 'Team Leaderboard',
             'portal': 'Review Portal',
