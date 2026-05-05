@@ -814,7 +814,12 @@ def index():
 @app.route('/api/health')
 def health():
     """Health check — useful for verifying the app started correctly."""
-    return jsonify({'status': 'ok', 'jobs_store': len(jobs)})
+    return jsonify({
+        'status': 'ok',
+        'jobs_store': len(jobs),
+        'databricks_configured': bool(DATABRICKS_HOST and DATABRICKS_TOKEN and DATABRICKS_WAREHOUSE_ID),
+        'databricks_host': DATABRICKS_HOST[:30] + '...' if DATABRICKS_HOST else 'NOT SET',
+    })
 
 
 @app.route('/api/search-employee', methods=['POST'])
