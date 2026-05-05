@@ -839,110 +839,171 @@ def get_aircall_users():
     return jsonify(result)
 
 
+def fetch_calls_via_mcp(user_email: str, date_from: str) -> list:
+    """Fallback: fetch calls via MCP API with date-range chunking."""
+    from_date = datetime.strptime(date_from, '%Y-%m-%d')
+    to_date = datetime.now()
+    total_days = (to_date - from_date).days
+
+    if total_days <= 3:
+        result = call_mcp_tool('list_aircall_calls', {
+            'user_email': user_email, 'limit': 100, 'date_from': date_from,
+        })
+        return _parse_aircall_calls(result)
+
+    chunk_days = 5
+    chunks = []
+    current = from_date
+    while current < to_date:
+        chunk_end = min(current + timedelta(days=chunk_days), to_date)
+        chunks.append((current.strftime('%Y-%m-%d'), chunk_end.strftime('%Y-%m-%d')))
+        current = chunk_end
+
+    all_calls = []
+    seen_ids = set()
+
+    def fetch_chunk(chunk_from, chunk_to):
+        args = {'user_email': user_email, 'limit': 100, 'date_from': chunk_from}
+        if chunk_to != to_date.strftime('%Y-%m-%d'):
+            args['date_to'] = chunk_to
+        return call_mcp_tool('list_aircall_calls', args)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = [pool.submit(fetch_chunk, cf, ct) for cf, ct in chunks]
+        for future in futures:
+            try:
+                result = future.result()
+                for c in _parse_aircall_calls(result):
+                    cid = c.get('id') or c.get('call_id') or ''
+                    if cid and cid not in seen_ids:
+                        seen_ids.add(cid)
+                        all_calls.append(c)
+                    elif not cid:
+                        all_calls.append(c)
+            except Exception as e:
+                logger.warning("Failed to fetch call chunk: %s", e)
+
+    return all_calls
+
+
 def fetch_eligible_calls(user_email: str, date_from: str) -> list:
-    """Fetch calls from Databricks pre-filtered against Zoho.
-    Only returns calls where the caller is an Active/Allocated lead
-    OR a deal was created for that phone on the same day as the call.
-    Uses Databricks aircall.calls table which has actual caller phone (raw_digits).
+    """Fetch calls pre-filtered against Zoho.
+    Uses Databricks if available (has actual caller phone for filtering).
+    Falls back to MCP API if Databricks is not configured.
     """
-    if not all([DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID]):
-        logger.error("Databricks credentials not configured — cannot fetch calls")
-        return []
+    use_databricks = all([DATABRICKS_HOST, DATABRICKS_TOKEN, DATABRICKS_WAREHOUSE_ID])
 
-    # Query 1: Get all 5+ min calls for this user from Databricks
-    logger.info("Fetching calls for %s from %s", user_email, date_from)
-    calls_rows = query_databricks(f"""
-        SELECT
-            c.id,
-            c.raw_digits,
-            c.direction,
-            c.duration,
-            CAST(c.started_at AS STRING) as started_at,
-            CAST(c.answered_at AS STRING) as answered_at,
-            CAST(c.ended_at AS STRING) as ended_at,
-            c.recording,
-            c.asset,
-            c.contact.name as contact_name,
-            c.status
-        FROM trilogycare_dev.aircall.calls c
-        WHERE c.user.email = '{user_email}'
-        AND c.duration >= 300
-        AND c.started_at >= TIMESTAMP '{date_from} 00:00:00'
-        ORDER BY c.started_at DESC
-    """)
+    if use_databricks:
+        # --- Databricks path: full Zoho filtering ---
+        logger.info("Fetching calls via Databricks for %s from %s", user_email, date_from)
+        calls_rows = query_databricks(f"""
+            SELECT
+                c.id,
+                c.raw_digits,
+                c.direction,
+                c.duration,
+                CAST(c.started_at AS STRING) as started_at,
+                CAST(c.answered_at AS STRING) as answered_at,
+                CAST(c.ended_at AS STRING) as ended_at,
+                c.recording,
+                c.asset,
+                c.contact.name as contact_name,
+                c.status
+            FROM trilogycare_dev.aircall.calls c
+            WHERE c.user.email = '{user_email}'
+            AND c.duration >= 300
+            AND c.started_at >= TIMESTAMP '{date_from} 00:00:00'
+            ORDER BY c.started_at DESC
+        """)
 
-    logger.info("Databricks returned %d calls for %s", len(calls_rows), user_email)
-    if not calls_rows:
-        return []
+        logger.info("Databricks returned %d calls for %s", len(calls_rows), user_email)
+        if not calls_rows:
+            return []
 
-    # Query 2: Get active/allocated lead phones
-    lead_phones = get_active_lead_phones()
+        lead_phones = get_active_lead_phones()
+        deal_phone_dates = get_deal_phones_by_date()
 
-    # Query 3: Get deal phone -> creation dates (last 90 days)
-    deal_phone_dates = get_deal_phones_by_date()
+        eligible_calls = []
+        for row in calls_rows:
+            call_id = str(row[0]) if row[0] else ''
+            raw_digits = row[1] or ''
+            direction = row[2] or ''
+            duration = row[3] or 0
+            started_at = row[4] or ''
+            answered_at = row[5] or ''
+            ended_at = row[6] or ''
+            recording = row[7] or ''
+            asset = row[8] or ''
+            contact_name = row[9] or ''
+            status = row[10] or ''
 
-    # Filter calls: only include those matching a lead or deal-on-same-day
-    eligible_calls = []
-    for row in calls_rows:
-        call_id = str(row[0]) if row[0] else ''
-        raw_digits = row[1] or ''
-        direction = row[2] or ''
-        duration = row[3] or 0
-        started_at = row[4] or ''
-        answered_at = row[5] or ''
-        ended_at = row[6] or ''
-        recording = row[7] or ''
-        asset = row[8] or ''
-        contact_name = row[9] or ''
-        status = row[10] or ''
-
-        # Skip anonymous or missing phone
-        if not raw_digits or raw_digits == 'anonymous':
-            continue
-
-        # Check eligibility against Zoho
-        caller_normalized = normalize_phone(raw_digits)
-        if not caller_normalized:
-            continue
-
-        call_date = started_at[:10] if started_at else ''
-
-        # Must match active/allocated lead OR deal created same day
-        if caller_normalized not in lead_phones:
-            if not (caller_normalized in deal_phone_dates and call_date in deal_phone_dates.get(caller_normalized, set())):
+            if not raw_digits or raw_digits == 'anonymous':
                 continue
 
-        # Build call object matching expected frontend format
-        duration_int = int(duration) if duration else 0
-        duration_mins = round(duration_int / 60, 1)
-        # Format timestamps for JS parsing (add AEST offset if no timezone present)
-        fmt_started = started_at.replace(' ', 'T') + '+10:00' if started_at and '+' not in started_at and 'T' not in started_at else started_at
-        fmt_answered = answered_at.replace(' ', 'T') + '+10:00' if answered_at and '+' not in answered_at and 'T' not in answered_at else answered_at
-        fmt_ended = ended_at.replace(' ', 'T') + '+10:00' if ended_at and '+' not in ended_at and 'T' not in ended_at else ended_at
-        call_obj = {
-            'id': call_id,
-            'call_id': call_id,
-            'raw_digits': raw_digits,
-            'phone_number': raw_digits,
-            'direction': direction,
-            'duration': duration_int,
-            'duration_minutes': duration_mins,
-            'created_at': fmt_started,
-            'started_at': fmt_started,
-            'answered_at': fmt_answered,
-            'ended_at': fmt_ended,
-            'status': status,
-            'contact_name': contact_name,
-            'recording': recording,
-            'recording_url': recording or asset or '',
-            'asset': asset or f"https://assets.aircall.io/calls/{call_id}/recording",
-            'has_recording': bool(recording or asset),
-            'has_transcript': 'false',
-            'zoho_verified': True,
-        }
-        eligible_calls.append(call_obj)
+            caller_normalized = normalize_phone(raw_digits)
+            if not caller_normalized:
+                continue
 
-    return eligible_calls
+            call_date = started_at[:10] if started_at else ''
+
+            if caller_normalized not in lead_phones:
+                if not (caller_normalized in deal_phone_dates and call_date in deal_phone_dates.get(caller_normalized, set())):
+                    continue
+
+            duration_int = int(duration) if duration else 0
+            duration_mins = round(duration_int / 60, 1)
+            fmt_started = started_at.replace(' ', 'T') + '+10:00' if started_at and '+' not in started_at and 'T' not in started_at else started_at
+            fmt_answered = answered_at.replace(' ', 'T') + '+10:00' if answered_at and '+' not in answered_at and 'T' not in answered_at else answered_at
+            fmt_ended = ended_at.replace(' ', 'T') + '+10:00' if ended_at and '+' not in ended_at and 'T' not in ended_at else ended_at
+            call_obj = {
+                'id': call_id,
+                'call_id': call_id,
+                'raw_digits': raw_digits,
+                'phone_number': raw_digits,
+                'direction': direction,
+                'duration': duration_int,
+                'duration_minutes': duration_mins,
+                'created_at': fmt_started,
+                'started_at': fmt_started,
+                'answered_at': fmt_answered,
+                'ended_at': fmt_ended,
+                'status': status,
+                'contact_name': contact_name,
+                'recording': recording,
+                'recording_url': recording or asset or '',
+                'asset': asset or f"https://assets.aircall.io/calls/{call_id}/recording",
+                'has_recording': bool(recording or asset),
+                'has_transcript': 'false',
+                'zoho_verified': True,
+            }
+            eligible_calls.append(call_obj)
+
+        return eligible_calls
+
+    else:
+        # --- MCP fallback: fetch via API, show all 5+ min calls ---
+        logger.info("Databricks not configured, fetching calls via MCP for %s", user_email)
+        all_calls = fetch_calls_via_mcp(user_email, date_from)
+
+        calls = []
+        for c in all_calls:
+            dur = c.get('duration') or 0
+            if isinstance(dur, str):
+                try:
+                    dur = int(dur)
+                except ValueError:
+                    dur = 0
+            if dur < 300:
+                continue
+            if c.get('recording') and not c.get('recording_url'):
+                c['recording_url'] = c['recording']
+            if not c.get('recording_url') and c.get('asset'):
+                c['recording_url'] = c['asset']
+            if c.get('recording') or c.get('recording_url') or c.get('asset'):
+                c['has_recording'] = True
+            calls.append(c)
+
+        return calls
 
 
 @app.route('/api/calls', methods=['POST'])

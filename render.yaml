@@ -27,10 +27,10 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: DATABRICKS_HOST
-        sync: false
+        value: "https://dbc-8629faad-d1c2.cloud.databricks.com"
       - key: DATABRICKS_TOKEN
         sync: false
       - key: DATABRICKS_WAREHOUSE_ID
-        sync: false
+        value: "78eb07c6638f99bc"
       - key: PYTHON_VERSION
         value: "3.11.11"
