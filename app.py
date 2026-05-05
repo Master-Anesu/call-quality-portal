@@ -162,68 +162,76 @@ def query_databricks(sql: str) -> list:
 
 def normalize_phone(phone: str) -> str:
     """Normalize a phone number to digits only (last 9 digits) for matching."""
-    if not phone:
+    if not phone or phone == 'None' or phone == 'null':
         return ''
     digits = re.sub(r'\D', '', phone)
     # Use last 9 digits to handle country code variations (+61 vs 0)
     return digits[-9:] if len(digits) >= 9 else digits
 
 
-def get_eligible_phones() -> set:
-    """Get set of normalized phone numbers eligible for call review.
-    Eligible callers are:
-    - Leads with Journey_Stage 'B-Active HCP' or 'B-Allocated HCP'
-    - Contacts (converted leads / consumers)
-    - Deals (sales created)
-    """
-    phones = set()
-
-    # Active/Allocated leads
+def get_active_lead_phones() -> set:
+    """Get normalized phone numbers for leads with Active or Allocated journey stage."""
     rows = query_databricks("""
         SELECT Phone, Mobile, Contact_Phone
         FROM trilogycare_dev.zoho_crm.leads
         WHERE Journey_Stage IN ('B-Active HCP', 'B-Allocated HCP')
     """)
+    phones = set()
     for row in rows:
         for val in row:
             if val:
                 n = normalize_phone(str(val))
                 if n:
                     phones.add(n)
-
-    # Contacts (converted leads / consumers)
-    rows = query_databricks("""
-        SELECT Phone, Mobile
-        FROM trilogycare_dev.zoho_crm.contacts
-        WHERE Phone IS NOT NULL OR Mobile IS NOT NULL
-    """)
-    for row in rows:
-        for val in row:
-            if val:
-                n = normalize_phone(str(val))
-                if n:
-                    phones.add(n)
-
-    # Deals (sales)
-    rows = query_databricks("""
-        SELECT Client_Phone, Mobile
-        FROM trilogycare_dev.zoho_crm.deals
-        WHERE Client_Phone IS NOT NULL OR Mobile IS NOT NULL
-    """)
-    for row in rows:
-        for val in row:
-            if val:
-                n = normalize_phone(str(val))
-                if n:
-                    phones.add(n)
-
     return phones
 
 
-def check_call_eligible(phone: str) -> dict:
-    """Check if a phone number belongs to an eligible caller for review.
-    Eligible: Active/Allocated lead, contact (consumer), or deal (sale).
-    Returns dict with 'is_valid' bool, 'source', and 'lead_name'."""
+def get_deal_phones_by_date() -> dict:
+    """Get mapping of normalized phone -> set of deal creation dates (YYYY-MM-DD).
+    Only includes deals from the last 90 days for performance."""
+    rows = query_databricks("""
+        SELECT Client_Phone, Mobile, CAST(Created_Time AS STRING)
+        FROM trilogycare_dev.zoho_crm.deals
+        WHERE Created_Time >= CURRENT_DATE - INTERVAL 90 DAYS
+        AND (Client_Phone IS NOT NULL OR Mobile IS NOT NULL)
+    """)
+    phone_dates = {}
+    for row in rows:
+        created_str = row[2] or ''
+        deal_date = created_str[:10] if created_str else ''
+        if not deal_date:
+            continue
+        for val in row[:2]:
+            if val:
+                n = normalize_phone(str(val))
+                if n:
+                    if n not in phone_dates:
+                        phone_dates[n] = set()
+                    phone_dates[n].add(deal_date)
+    return phone_dates
+
+
+def is_call_eligible(caller_phone: str, call_date: str, lead_phones: set, deal_phone_dates: dict) -> bool:
+    """Check if a call is eligible for review.
+    Eligible if:
+    - Caller is an Active/Allocated lead, OR
+    - A deal was created for this phone on the same day as the call
+    """
+    normalized = normalize_phone(caller_phone)
+    if not normalized:
+        return False
+    # Active/Allocated lead — always eligible
+    if normalized in lead_phones:
+        return True
+    # Deal created on the same day as the call
+    if normalized in deal_phone_dates and call_date in deal_phone_dates[normalized]:
+        return True
+    return False
+
+
+def check_call_eligible(phone: str, call_date: str = '') -> dict:
+    """Check if a specific call is eligible for review.
+    Used by the review pipeline for individual call verification."""
     if not phone:
         return {'is_valid': False, 'source': None, 'lead_name': None}
     normalized = normalize_phone(phone)
@@ -250,41 +258,25 @@ def check_call_eligible(phone: str) -> dict:
             'lead_name': f"{rows[0][0] or ''} {rows[0][1] or ''}".strip(),
         }
 
-    # Check contacts (converted leads / consumers)
-    rows = query_databricks(f"""
-        SELECT First_Name, Last_Name
-        FROM trilogycare_dev.zoho_crm.contacts
-        WHERE (
-            RIGHT(REGEXP_REPLACE(Phone, '[^0-9]', ''), 9) = '{normalized}'
-            OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
-        )
-        LIMIT 1
-    """)
-    if rows:
-        return {
-            'is_valid': True,
-            'source': 'contact',
-            'journey_stage': 'Consumer',
-            'lead_name': f"{rows[0][0] or ''} {rows[0][1] or ''}".strip(),
-        }
-
-    # Check deals (sales)
-    rows = query_databricks(f"""
-        SELECT Contact_Name.name, Stage
-        FROM trilogycare_dev.zoho_crm.deals
-        WHERE (
-            RIGHT(REGEXP_REPLACE(Client_Phone, '[^0-9]', ''), 9) = '{normalized}'
-            OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
-        )
-        LIMIT 1
-    """)
-    if rows:
-        return {
-            'is_valid': True,
-            'source': 'deal',
-            'journey_stage': f"Deal - {rows[0][1] or ''}",
-            'lead_name': rows[0][0] or '',
-        }
+    # Check deals created on the same day as the call
+    if call_date:
+        rows = query_databricks(f"""
+            SELECT Contact_Name.name, Stage, CAST(Created_Time AS STRING)
+            FROM trilogycare_dev.zoho_crm.deals
+            WHERE CAST(Created_Time AS DATE) = '{call_date}'
+            AND (
+                RIGHT(REGEXP_REPLACE(Client_Phone, '[^0-9]', ''), 9) = '{normalized}'
+                OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
+            )
+            LIMIT 1
+        """)
+        if rows:
+            return {
+                'is_valid': True,
+                'source': 'deal',
+                'journey_stage': f"Deal - {rows[0][1] or ''}",
+                'lead_name': rows[0][0] or '',
+            }
 
     return {'is_valid': False, 'source': None, 'lead_name': None}
 
@@ -842,59 +834,102 @@ def get_aircall_users():
     return jsonify(result)
 
 
-def fetch_all_calls_paginated(user_email: str, date_from: str) -> list:
-    """Fetch all calls using date-range chunking to work around 100-call API limit.
-    Splits the range into 5-day windows and fetches in parallel."""
-    from_date = datetime.strptime(date_from, '%Y-%m-%d')
-    to_date = datetime.now()
-    total_days = (to_date - from_date).days
+def fetch_eligible_calls(user_email: str, date_from: str) -> list:
+    """Fetch calls from Databricks pre-filtered against Zoho.
+    Only returns calls where the caller is an Active/Allocated lead
+    OR a deal was created for that phone on the same day as the call.
+    Uses Databricks aircall.calls table which has actual caller phone (raw_digits).
+    """
+    # Query 1: Get all 5+ min calls for this user from Databricks
+    calls_rows = query_databricks(f"""
+        SELECT
+            c.id,
+            c.raw_digits,
+            c.direction,
+            c.duration,
+            CAST(c.started_at AS STRING) as started_at,
+            CAST(c.answered_at AS STRING) as answered_at,
+            CAST(c.ended_at AS STRING) as ended_at,
+            c.recording,
+            c.asset,
+            c.contact.name as contact_name,
+            c.status
+        FROM trilogycare_dev.aircall.calls c
+        WHERE c.user.email = '{user_email}'
+        AND c.duration >= 300
+        AND c.started_at >= TIMESTAMP '{date_from} 00:00:00'
+        ORDER BY c.started_at DESC
+    """)
 
-    if total_days <= 3:
-        result = call_mcp_tool('list_aircall_calls', {
-            'user_email': user_email, 'limit': 100, 'date_from': date_from,
-        })
-        return _parse_aircall_calls(result)
+    if not calls_rows:
+        return []
 
-    # Split into 5-day chunks
-    chunk_days = 5
-    chunks = []
-    current = from_date
-    while current < to_date:
-        chunk_end = min(current + timedelta(days=chunk_days), to_date)
-        chunks.append((current.strftime('%Y-%m-%d'), chunk_end.strftime('%Y-%m-%d')))
-        current = chunk_end
+    # Query 2: Get active/allocated lead phones
+    lead_phones = get_active_lead_phones()
 
-    all_calls = []
-    seen_ids = set()
+    # Query 3: Get deal phone -> creation dates (last 90 days)
+    deal_phone_dates = get_deal_phones_by_date()
 
-    def fetch_chunk(chunk_from, chunk_to):
-        args = {'user_email': user_email, 'limit': 100, 'date_from': chunk_from}
-        if chunk_to != to_date.strftime('%Y-%m-%d'):
-            args['date_to'] = chunk_to
-        return call_mcp_tool('list_aircall_calls', args)
+    # Filter calls: only include those matching a lead or deal-on-same-day
+    eligible_calls = []
+    for row in calls_rows:
+        call_id = str(row[0]) if row[0] else ''
+        raw_digits = row[1] or ''
+        direction = row[2] or ''
+        duration = row[3] or 0
+        started_at = row[4] or ''
+        answered_at = row[5] or ''
+        ended_at = row[6] or ''
+        recording = row[7] or ''
+        asset = row[8] or ''
+        contact_name = row[9] or ''
+        status = row[10] or ''
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = [pool.submit(fetch_chunk, cf, ct) for cf, ct in chunks]
-        for future in futures:
-            try:
-                result = future.result()
-                chunk_calls = _parse_aircall_calls(result)
-                for c in chunk_calls:
-                    cid = c.get('id') or c.get('call_id') or ''
-                    if cid and cid not in seen_ids:
-                        seen_ids.add(cid)
-                        all_calls.append(c)
-                    elif not cid:
-                        all_calls.append(c)
-            except Exception as e:
-                logger.warning("Failed to fetch call chunk: %s", e)
+        # Skip anonymous or missing phone
+        if not raw_digits or raw_digits == 'anonymous':
+            continue
 
-    return all_calls
+        # Check eligibility against Zoho
+        caller_normalized = normalize_phone(raw_digits)
+        if not caller_normalized:
+            continue
+
+        call_date = started_at[:10] if started_at else ''
+
+        # Must match active/allocated lead OR deal created same day
+        if caller_normalized not in lead_phones:
+            if not (caller_normalized in deal_phone_dates and call_date in deal_phone_dates.get(caller_normalized, set())):
+                continue
+
+        # Build call object matching expected frontend format
+        duration_mins = round(int(duration) / 60, 1) if duration else 0
+        call_obj = {
+            'id': call_id,
+            'call_id': call_id,
+            'raw_digits': raw_digits,
+            'direction': direction,
+            'duration': int(duration) if duration else 0,
+            'duration_minutes': duration_mins,
+            'created_at': started_at,
+            'started_at': started_at,
+            'answered_at': answered_at,
+            'ended_at': ended_at,
+            'status': status,
+            'contact_name': contact_name,
+            'recording': recording,
+            'recording_url': recording or asset or '',
+            'asset': asset,
+            'has_recording': bool(recording or asset),
+            'zoho_verified': True,
+        }
+        eligible_calls.append(call_obj)
+
+    return eligible_calls
 
 
 @app.route('/api/calls', methods=['POST'])
 def get_calls():
-    """Get recent calls for an Aircall user by email with date filter support."""
+    """Get recent calls for an Aircall user, pre-filtered against Zoho eligibility."""
     user_email = request.json.get('user_email', '').strip()
     date_filter = request.json.get('date', '').strip()
     if not user_email:
@@ -907,36 +942,7 @@ def get_calls():
     else:
         date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
 
-    all_calls = fetch_all_calls_paginated(user_email, date_from)
-
-    # Get eligible phone numbers (active/allocated leads + contacts + deals)
-    eligible_phones = get_eligible_phones()
-
-    # Only include calls over 5 minutes (300 seconds) AND where caller is in Zoho
-    calls = []
-    for c in all_calls:
-        dur = c.get('duration') or 0
-        if isinstance(dur, str):
-            try:
-                dur = int(dur)
-            except ValueError:
-                dur = 0
-        if dur < 300:
-            continue
-        # Check if caller phone matches an eligible Zoho record
-        caller_phone = c.get('raw_digits') or c.get('phone_number') or c.get('number', {}).get('digits', '') or ''
-        caller_normalized = normalize_phone(caller_phone)
-        if caller_normalized and eligible_phones and caller_normalized not in eligible_phones:
-            continue
-        c['zoho_verified'] = True
-        # Normalize recording fields so frontend can detect them
-        if c.get('recording') and not c.get('recording_url'):
-            c['recording_url'] = c['recording']
-        if not c.get('recording_url') and c.get('asset'):
-            c['recording_url'] = c['asset']
-        if c.get('recording') or c.get('recording_url') or c.get('asset'):
-            c['has_recording'] = True
-        calls.append(c)
+    calls = fetch_eligible_calls(user_email, date_from)
 
     today_str = datetime.now().strftime('%Y-%m-%d')
     unique_clients = set()
@@ -945,18 +951,9 @@ def get_calls():
         call_date = c.get('created_at', '')[:10]
         if call_date == today_str:
             today_calls += 1
-            client_id = c.get('contact_name') or c.get('raw_digits') or c.get('phone_number') or ''
+            client_id = c.get('contact_name') or c.get('raw_digits') or ''
             if client_id:
                 unique_clients.add(client_id.lower())
-
-    # Background-cache today's recordings while S3 URLs might still be valid
-    def _cache_today_recordings():
-        for c in calls:
-            rec_url = c.get('recording_url') or c.get('recording') or ''
-            cid = c.get('id') or c.get('call_id')
-            if rec_url and cid and 'amazonaws.com' in rec_url:
-                cache_recording(str(cid), rec_url)
-    threading.Thread(target=_cache_today_recordings, daemon=True).start()
 
     return jsonify({
         'result': {
@@ -1176,15 +1173,17 @@ def run_review_pipeline(job_id: str, data: dict):
         direct_link = data.get('direct_link', '')
         recording_url = data.get('recording_url', '')
 
-        # Step 0: Verify caller is in Zoho (active/allocated lead, contact, or deal)
+        # Step 0: Verify caller is eligible if phone is available
+        # (Aircall list API doesn't expose caller phone, but it may be passed from details)
         if client_phone:
-            eligibility = check_call_eligible(client_phone)
+            call_date_str = call_date[:10] if call_date else ''
+            eligibility = check_call_eligible(client_phone, call_date_str)
             if not eligibility['is_valid']:
                 jobs[job_id] = {
                     'status': 'error',
-                    'message': 'This call is not eligible for review — the caller is not in Zoho as an Active/Allocated lead, contact, or deal.',
+                    'message': 'This call is not eligible for review — the caller is not an Active/Allocated lead, and no deal was created on the day of this call.',
                     'result': None,
-                    'error': 'Caller not in Zoho',
+                    'error': 'Call not eligible',
                 }
                 return
             if eligibility['lead_name'] and client_name == 'Unknown':
