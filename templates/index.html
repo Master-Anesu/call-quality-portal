@@ -940,6 +940,11 @@
         </div>
         <div class="nav-section">
             <div class="nav-section-label">Tools</div>
+            <div class="nav-item" onclick="switchPage('teams')">
+                <span class="nav-icon">&#9878;</span>
+                Teams
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
             <div class="nav-item" onclick="switchPage('leaderboard')">
                 <span class="nav-icon">&#9733;</span>
                 Leaderboard
@@ -1134,6 +1139,171 @@
                                 <div class="review-meta">28 Apr 2026 &middot; Inbound &middot; 9 min</div>
                             </div>
                             <div class="review-score" style="color: var(--orange);">73%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PAGE: Teams ===== -->
+        <div class="page" id="page-teams">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Live Team Analytics Coming Soon
+                    <small>Data will auto-populate as calls are reviewed by AI</small>
+                </div>
+            </div>
+            <div class="blurred">
+                <!-- Team comparison KPIs -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+                    <!-- Top Dogs -->
+                    <div class="card" style="border-top: 4px solid var(--teal);">
+                        <div class="card-header">
+                            <div class="card-title" style="font-size: 18px;">Top Dogs</div>
+                            <div style="font-size: 12px; color: var(--gray-500);">Team Anesu Taderera</div>
+                        </div>
+                        <div class="card-body">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <div style="font-size: 48px; font-weight: 800; color: var(--navy);">76%</div>
+                                <div style="font-size: 13px; color: var(--gray-500);">Team Average Score</div>
+                            </div>
+                            <div class="stage-metric-grid" style="grid-template-columns: 1fr 1fr;">
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Introduction</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">11.2<span class="stage-metric-max">/15</span></div>
+                                </div>
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Discovery</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">25.4<span class="stage-metric-max">/35</span></div>
+                                </div>
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Pitch</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">25.8<span class="stage-metric-max">/35</span></div>
+                                </div>
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Close</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">11.8<span class="stage-metric-max">/15</span></div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-100);">
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span style="color: var(--gray-500);">Calls Reviewed</span>
+                                    <span style="font-weight: 700; color: var(--navy);">62</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span style="color: var(--gray-500);">A+ Scores</span>
+                                    <span style="font-weight: 700; color: var(--dark-teal);">8</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span style="color: var(--gray-500);">Below 60%</span>
+                                    <span style="font-weight: 700; color: var(--red);">3</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                                    <span style="color: var(--gray-500);">Top Performer</span>
+                                    <span style="font-weight: 700; color: var(--navy);">Aprocina Anthony</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deal Demons -->
+                    <div class="card" style="border-top: 4px solid var(--navy);">
+                        <div class="card-header">
+                            <div class="card-title" style="font-size: 18px;">Deal Demons</div>
+                            <div style="font-size: 12px; color: var(--gray-500);">Team Caitlin Burrill</div>
+                        </div>
+                        <div class="card-body">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <div style="font-size: 48px; font-weight: 800; color: var(--navy);">72%</div>
+                                <div style="font-size: 13px; color: var(--gray-500);">Team Average Score</div>
+                            </div>
+                            <div class="stage-metric-grid" style="grid-template-columns: 1fr 1fr;">
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Introduction</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">10.6<span class="stage-metric-max">/15</span></div>
+                                </div>
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Discovery</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">24.2<span class="stage-metric-max">/35</span></div>
+                                </div>
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Pitch</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">24.6<span class="stage-metric-max">/35</span></div>
+                                </div>
+                                <div class="stage-metric">
+                                    <div class="stage-metric-label">Close</div>
+                                    <div class="stage-metric-value" style="font-size: 22px;">11.4<span class="stage-metric-max">/15</span></div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-100);">
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span style="color: var(--gray-500);">Calls Reviewed</span>
+                                    <span style="font-weight: 700; color: var(--navy);">54</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span style="color: var(--gray-500);">A+ Scores</span>
+                                    <span style="font-weight: 700; color: var(--dark-teal);">4</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px;">
+                                    <span style="color: var(--gray-500);">Below 60%</span>
+                                    <span style="font-weight: 700; color: var(--red);">4</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 13px;">
+                                    <span style="color: var(--gray-500);">Top Performer</span>
+                                    <span style="font-weight: 700; color: var(--navy);">Corey Mcconkie</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team member breakdown tables -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <!-- Top Dogs roster -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Top Dogs — Roster</div>
+                        </div>
+                        <div class="card-body card-body-flush">
+                            <table class="lb-table">
+                                <thead><tr><th>#</th><th>Rep</th><th>Score</th><th>Grade</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="lb-rank gold">1</td><td class="lb-name">Aprocina Anthony</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:92%"></div></div><span class="lb-score-num">92</span></div></td><td><span class="lb-grade a-plus">A+</span></td></tr>
+                                    <tr><td class="lb-rank silver">2</td><td class="lb-name">Dominic Stevenson</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:83%"></div></div><span class="lb-score-num">83</span></div></td><td><span class="lb-grade a">A</span></td></tr>
+                                    <tr><td class="lb-rank bronze">3</td><td class="lb-name">Heidi Brdoch</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:73%"></div></div><span class="lb-score-num">73</span></div></td><td><span class="lb-grade b">B</span></td></tr>
+                                    <tr><td class="lb-rank">4</td><td class="lb-name">Daneeka Miles</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:74%"></div></div><span class="lb-score-num">74</span></div></td><td><span class="lb-grade b">B</span></td></tr>
+                                    <tr><td class="lb-rank">5</td><td class="lb-name">Stella Su'a</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:72%"></div></div><span class="lb-score-num">72</span></div></td><td><span class="lb-grade b">B</span></td></tr>
+                                    <tr><td class="lb-rank">6</td><td class="lb-name">Hazeldean Jackson</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:66%"></div></div><span class="lb-score-num">66</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">7</td><td class="lb-name">Telesia Mau'u</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:65%"></div></div><span class="lb-score-num">65</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">8</td><td class="lb-name">Ehtisham Muhammad Mehdi</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:62%"></div></div><span class="lb-score-num">62</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">9</td><td class="lb-name">Ewan Gillespie</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:55%"></div></div><span class="lb-score-num">55</span></div></td><td><span class="lb-grade c">D</span></td></tr>
+                                    <tr><td class="lb-rank">10</td><td class="lb-name">Cody Lilley</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:52%"></div></div><span class="lb-score-num">52</span></div></td><td><span class="lb-grade c">D</span></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Deal Demons roster -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Deal Demons — Roster</div>
+                        </div>
+                        <div class="card-body card-body-flush">
+                            <table class="lb-table">
+                                <thead><tr><th>#</th><th>Rep</th><th>Score</th><th>Grade</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="lb-rank gold">1</td><td class="lb-name">Corey Mcconkie</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:87%"></div></div><span class="lb-score-num">87</span></div></td><td><span class="lb-grade a">A</span></td></tr>
+                                    <tr><td class="lb-rank silver">2</td><td class="lb-name">Jordan Smith</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:76%"></div></div><span class="lb-score-num">76</span></div></td><td><span class="lb-grade b">B</span></td></tr>
+                                    <tr><td class="lb-rank bronze">3</td><td class="lb-name">Andrew Kozlov</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:76%"></div></div><span class="lb-score-num">76</span></div></td><td><span class="lb-grade b">B</span></td></tr>
+                                    <tr><td class="lb-rank">4</td><td class="lb-name">Buck Kuzmins</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:70%"></div></div><span class="lb-score-num">70</span></div></td><td><span class="lb-grade b">B</span></td></tr>
+                                    <tr><td class="lb-rank">5</td><td class="lb-name">Sophie Farrow</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:69%"></div></div><span class="lb-score-num">69</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">6</td><td class="lb-name">Matthew Farrelly</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:68%"></div></div><span class="lb-score-num">68</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">7</td><td class="lb-name">Adam Hughes</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:67%"></div></div><span class="lb-score-num">67</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">8</td><td class="lb-name">Hunter Goodfellow</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:64%"></div></div><span class="lb-score-num">64</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">9</td><td class="lb-name">Bonheur Chala</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:63%"></div></div><span class="lb-score-num">63</span></div></td><td><span class="lb-grade c">C</span></td></tr>
+                                    <tr><td class="lb-rank">10</td><td class="lb-name">Luke Saito</td><td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:58%"></div></div><span class="lb-score-num">58</span></div></td><td><span class="lb-grade c">D</span></td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -1785,6 +1955,7 @@
 
         const titles = {
             'dashboard': 'Quality Dashboard',
+            'teams': 'Team Comparison',
             'leaderboard': 'Team Leaderboard',
             'portal': 'Review Portal',
             'stage-introduction': 'Introduction Stage',
