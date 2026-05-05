@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Call Quality Review — Trilogy Care</title>
+    <title>Call Quality Dashboard — Trilogy Care</title>
     <style>
         :root {
             --navy: #2C4C79;
@@ -16,6 +16,7 @@
             --red: #E04B51;
             --orange: #E0763C;
             --yellow: #FEBD33;
+            --green: #34C759;
             --white: #FFFFFF;
             --gray-50: #F8FAFB;
             --gray-100: #F0F3F5;
@@ -33,51 +34,477 @@
             background: var(--gray-50);
             color: var(--gray-900);
             min-height: 100vh;
+            display: flex;
         }
 
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+        /* ===== Sidebar ===== */
+        .sidebar {
+            width: 240px;
+            background: linear-gradient(180deg, var(--navy-dark) 0%, var(--navy) 100%);
             color: var(--white);
-            padding: 0;
-            position: sticky;
+            position: fixed;
             top: 0;
-            z-index: 100;
-            box-shadow: 0 2px 12px rgba(44, 76, 121, 0.25);
+            left: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            z-index: 200;
+            transition: transform 0.3s ease;
         }
-        .header-inner {
-            max-width: 960px;
-            margin: 0 auto;
-            padding: 20px 32px;
+        .sidebar-brand {
+            padding: 24px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .sidebar-brand h1 {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .sidebar-brand h1 span { color: var(--teal); }
+        .sidebar-brand p {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .sidebar-nav {
+            flex: 1;
+            padding: 16px 0;
+            overflow-y: auto;
+        }
+        .nav-section {
+            padding: 0 12px;
+            margin-bottom: 8px;
+        }
+        .nav-section-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: rgba(255,255,255,0.35);
+            padding: 8px 12px 6px;
+            font-weight: 600;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 16px;
+            border-radius: 8px;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+        .nav-item:hover {
+            background: rgba(255,255,255,0.06);
+            color: var(--white);
+        }
+        .nav-item.active {
+            background: rgba(67, 192, 190, 0.15);
+            color: var(--teal-light);
+            font-weight: 600;
+        }
+        .nav-item .nav-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 16px;
+            opacity: 0.8;
+        }
+        .nav-item.active .nav-icon { opacity: 1; }
+        .nav-badge {
+            margin-left: auto;
+            background: var(--teal);
+            color: var(--white);
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 10px;
+        }
+        .nav-badge.coming-soon {
+            background: rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.4);
+            font-size: 9px;
+        }
+        .sidebar-footer {
+            padding: 16px 20px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            font-size: 11px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        /* ===== Main Content ===== */
+        .main-wrapper {
+            margin-left: 240px;
+            flex: 1;
+            min-height: 100vh;
+        }
+
+        /* Top bar */
+        .topbar {
+            background: var(--white);
+            border-bottom: 1px solid var(--gray-200);
+            padding: 16px 32px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
-        .header h1 {
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .topbar-title {
             font-size: 20px;
-            font-weight: 600;
-            letter-spacing: -0.3px;
-        }
-        .header h1 span {
-            color: var(--teal);
             font-weight: 700;
+            color: var(--navy);
         }
-        .header-badge {
-            background: rgba(67, 192, 190, 0.15);
-            border: 1px solid rgba(67, 192, 190, 0.3);
-            color: var(--teal-light);
-            padding: 4px 12px;
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .period-select {
+            padding: 8px 14px;
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--gray-700);
+            background: var(--white);
+            cursor: pointer;
+        }
+        .live-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(52, 199, 89, 0.08);
+            border: 1px solid rgba(52, 199, 89, 0.2);
             border-radius: 20px;
             font-size: 12px;
-            font-weight: 500;
+            font-weight: 600;
+            color: var(--green);
+        }
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
 
-        /* Main */
-        .main {
-            max-width: 960px;
-            margin: 0 auto;
-            padding: 32px;
+        /* ===== Page Content ===== */
+        .page-content {
+            padding: 28px 32px;
+            max-width: 1400px;
         }
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* ===== KPI Cards ===== */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .kpi-card {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 22px 20px;
+            border: 1px solid var(--gray-200);
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+        .kpi-card.kpi-teal::before { background: var(--teal); }
+        .kpi-card.kpi-navy::before { background: var(--navy); }
+        .kpi-card.kpi-green::before { background: var(--green); }
+        .kpi-card.kpi-orange::before { background: var(--orange); }
+        .kpi-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--gray-500);
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-size: 36px;
+            font-weight: 800;
+            color: var(--navy);
+            line-height: 1;
+        }
+        .kpi-sub {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 6px;
+        }
+        .kpi-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 6px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .kpi-trend.up { background: rgba(52,199,89,0.1); color: var(--green); }
+        .kpi-trend.down { background: rgba(224,75,81,0.1); color: var(--red); }
+
+        /* ===== Cards / Panels ===== */
+        .card {
+            background: var(--white);
+            border-radius: 12px;
+            border: 1px solid var(--gray-200);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 22px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--navy);
+        }
+        .card-body { padding: 20px 22px; }
+        .card-body-flush { padding: 0; }
+
+        /* ===== Two column layout ===== */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .full-width { grid-column: 1 / -1; }
+
+        /* ===== Leaderboard Table ===== */
+        .lb-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .lb-table th {
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--gray-500);
+            font-weight: 600;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .lb-table td {
+            padding: 14px 16px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--gray-100);
+            vertical-align: middle;
+        }
+        .lb-table tr:last-child td { border-bottom: none; }
+        .lb-table tr:hover { background: var(--gray-50); }
+        .lb-rank {
+            font-weight: 800;
+            color: var(--navy);
+            width: 32px;
+            font-size: 15px;
+        }
+        .lb-rank.gold { color: #D4A017; }
+        .lb-rank.silver { color: #8A8A8A; }
+        .lb-rank.bronze { color: #B87333; }
+        .lb-name {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+        .lb-role {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+        .lb-score-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .lb-bar-track {
+            flex: 1;
+            height: 8px;
+            background: var(--gray-100);
+            border-radius: 4px;
+            overflow: hidden;
+            max-width: 100px;
+        }
+        .lb-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+        .lb-bar-fill.high { background: var(--teal); }
+        .lb-bar-fill.mid { background: var(--yellow); }
+        .lb-bar-fill.low { background: var(--red); }
+        .lb-score-num {
+            font-weight: 700;
+            font-size: 14px;
+            min-width: 28px;
+        }
+        .lb-grade {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 24px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .lb-grade.a-plus { background: rgba(67,192,190,0.15); color: var(--dark-teal); }
+        .lb-grade.a { background: rgba(67,192,190,0.1); color: var(--dark-teal); }
+        .lb-grade.b { background: rgba(254,189,51,0.15); color: var(--orange); }
+        .lb-grade.c { background: rgba(224,75,81,0.1); color: var(--red); }
+
+        /* ===== Stage Tabs ===== */
+        .stage-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--gray-200);
+            margin-bottom: 20px;
+        }
+        .stage-tab {
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-500);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .stage-tab:hover { color: var(--navy); }
+        .stage-tab.active {
+            color: var(--teal);
+            border-bottom-color: var(--teal);
+        }
+        .stage-tab .tab-weight {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--gray-300);
+            margin-left: 4px;
+        }
+        .stage-panel { display: none; }
+        .stage-panel.active { display: block; }
+
+        /* ===== Stage Detail Cards ===== */
+        .stage-metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .stage-metric {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stage-metric-label {
+            font-size: 12px;
+            color: var(--gray-500);
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        .stage-metric-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--navy);
+        }
+        .stage-metric-max {
+            font-size: 14px;
+            font-weight: 400;
+            color: var(--gray-300);
+        }
+
+        /* ===== Recent Reviews ===== */
+        .review-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--gray-100);
+            transition: background 0.2s;
+        }
+        .review-item:last-child { border-bottom: none; }
+        .review-item:hover { background: var(--gray-50); }
+        .review-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--navy) 0%, var(--teal) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            font-size: 13px;
+            font-weight: 700;
+            margin-right: 14px;
+            flex-shrink: 0;
+        }
+        .review-info { flex: 1; }
+        .review-name { font-weight: 600; font-size: 14px; color: var(--gray-900); }
+        .review-meta { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+        .review-score {
+            font-size: 16px;
+            font-weight: 700;
+            margin-left: 12px;
+        }
+
+        /* ===== Coming Soon Overlay ===== */
+        .coming-soon-overlay {
+            position: relative;
+        }
+        .coming-soon-banner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(44, 76, 121, 0.95);
+            color: var(--white);
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(44,76,121,0.3);
+        }
+        .coming-soon-banner small {
+            display: block;
+            font-weight: 400;
+            opacity: 0.7;
+            margin-top: 4px;
+            font-size: 12px;
+        }
+        .blurred { filter: blur(2px); opacity: 0.5; pointer-events: none; }
+
+        /* ===== Review Portal (existing) ===== */
+        .portal-container { max-width: 960px; }
 
         /* Steps indicator */
         .steps {
@@ -132,13 +559,11 @@
             background: var(--dark-teal);
             color: var(--white);
         }
-        .step.completed .step-num::after {
-            content: '\2713';
-        }
+        .step.completed .step-num::after { content: '\2713'; }
         .step.completed .step-num span { display: none; }
 
-        /* Cards */
-        .card {
+        /* Portal cards */
+        .portal-card {
             background: var(--white);
             border-radius: 12px;
             padding: 28px;
@@ -146,7 +571,7 @@
             border: 1px solid var(--gray-200);
             margin-bottom: 20px;
         }
-        .card-title {
+        .portal-card-title {
             font-size: 16px;
             font-weight: 600;
             color: var(--navy);
@@ -168,12 +593,8 @@
             transition: border-color 0.2s;
             outline: none;
         }
-        .search-input:focus {
-            border-color: var(--teal);
-        }
-        .search-input::placeholder {
-            color: var(--gray-300);
-        }
+        .search-input:focus { border-color: var(--teal); }
+        .search-input::placeholder { color: var(--gray-300); }
 
         /* Buttons */
         .btn {
@@ -189,23 +610,14 @@
             align-items: center;
             gap: 8px;
         }
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .btn-primary {
-            background: var(--navy);
-            color: var(--white);
-        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--navy); color: var(--white); }
         .btn-primary:hover:not(:disabled) {
             background: var(--navy-light);
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(44, 76, 121, 0.3);
         }
-        .btn-teal {
-            background: var(--teal);
-            color: var(--white);
-        }
+        .btn-teal { background: var(--teal); color: var(--white); }
         .btn-teal:hover:not(:disabled) {
             background: var(--teal-light);
             transform: translateY(-1px);
@@ -220,20 +632,10 @@
             border-color: var(--navy);
             background: var(--gray-50);
         }
-        .btn-danger {
-            background: var(--red);
-            color: var(--white);
-        }
-        .btn-sm {
-            padding: 8px 16px;
-            font-size: 13px;
-        }
+        .btn-sm { padding: 8px 16px; font-size: 13px; }
 
         /* Employee results */
-        .employee-list {
-            list-style: none;
-            margin-top: 16px;
-        }
+        .employee-list { list-style: none; margin-top: 16px; }
         .employee-item {
             display: flex;
             align-items: center;
@@ -256,22 +658,9 @@
             box-shadow: 0 0 0 1px var(--teal);
         }
         .emp-info { flex: 1; }
-        .emp-name {
-            font-weight: 600;
-            color: var(--navy);
-            font-size: 15px;
-        }
-        .emp-meta {
-            font-size: 13px;
-            color: var(--gray-500);
-            margin-top: 2px;
-        }
-        .emp-arrow {
-            color: var(--teal);
-            font-size: 18px;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
+        .emp-name { font-weight: 600; color: var(--navy); font-size: 15px; }
+        .emp-meta { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
+        .emp-arrow { color: var(--teal); font-size: 18px; opacity: 0; transition: opacity 0.2s; }
         .employee-item:hover .emp-arrow { opacity: 1; }
 
         /* Call list */
@@ -321,10 +710,7 @@
         }
 
         /* Progress / Status */
-        .status-bar {
-            display: none;
-            margin-top: 20px;
-        }
+        .status-bar { display: none; margin-top: 20px; }
         .status-bar.visible { display: block; }
         .status-message {
             display: flex;
@@ -428,10 +814,7 @@
         .score-low { background: rgba(224, 75, 81, 0.15); color: var(--red); }
 
         /* Email preview */
-        .email-preview {
-            display: none;
-            margin-top: 20px;
-        }
+        .email-preview { display: none; margin-top: 20px; }
         .email-preview.visible { display: block; }
         .email-field {
             display: flex;
@@ -439,12 +822,7 @@
             border-bottom: 1px solid var(--gray-100);
             font-size: 14px;
         }
-        .email-field-label {
-            width: 100px;
-            font-weight: 600;
-            color: var(--navy);
-            flex-shrink: 0;
-        }
+        .email-field-label { width: 100px; font-weight: 600; color: var(--navy); flex-shrink: 0; }
         .email-field-value { color: var(--gray-700); }
         .email-body {
             margin-top: 12px;
@@ -457,18 +835,10 @@
             white-space: pre-line;
             border: 1px solid var(--gray-200);
         }
-        .email-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 16px;
-        }
+        .email-actions { display: flex; gap: 12px; margin-top: 16px; }
 
         /* Sent confirmation */
-        .sent-confirmation {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
+        .sent-confirmation { display: none; text-align: center; padding: 40px; }
         .sent-confirmation.visible { display: block; }
         .sent-icon {
             width: 64px;
@@ -481,16 +851,8 @@
             font-size: 32px;
             margin-bottom: 16px;
         }
-        .sent-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 8px;
-        }
-        .sent-detail {
-            font-size: 14px;
-            color: var(--gray-500);
-        }
+        .sent-title { font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+        .sent-detail { font-size: 14px; color: var(--gray-500); }
 
         /* Utility */
         .hidden { display: none !important; }
@@ -498,213 +860,782 @@
         .mt-20 { margin-top: 20px; }
         .text-muted { color: var(--gray-500); font-size: 13px; }
         .text-center { text-align: center; }
-
-        /* Section panels */
         .panel { display: none; }
         .panel.active { display: block; }
 
-        /* Animations */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
         .fade-in { animation: fadeIn 0.3s ease forwards; }
 
+        /* Mobile hamburger */
+        .mobile-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--navy);
+            cursor: pointer;
+        }
+
         /* Responsive */
-        @media (max-width: 640px) {
-            .main { padding: 16px; }
-            .header-inner { padding: 16px; }
+        @media (max-width: 1024px) {
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .two-col { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-wrapper { margin-left: 0; }
+            .mobile-toggle { display: block; }
+            .kpi-grid { grid-template-columns: 1fr 1fr; }
+            .page-content { padding: 16px; }
             .scores-grid { grid-template-columns: 1fr; }
             .search-group { flex-direction: column; }
             .steps { flex-wrap: wrap; }
             .step { font-size: 12px; padding: 10px 8px; }
+            .stage-tabs { overflow-x: auto; }
         }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <div class="header-inner">
-        <h1><span>Trilogy</span> Care &mdash; Call Quality Review</h1>
-        <div class="header-badge">AI-Powered</div>
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+        <h1><span>Trilogy</span> Care</h1>
+        <p>Call Quality Dashboard</p>
     </div>
-</div>
-
-<div class="main">
-    <!-- Steps -->
-    <div class="steps">
-        <div class="step active" id="step-1">
-            <span class="step-num"><span>1</span></span>Find Rep
+    <nav class="sidebar-nav">
+        <div class="nav-section">
+            <div class="nav-section-label">Overview</div>
+            <div class="nav-item active" onclick="switchPage('dashboard')">
+                <span class="nav-icon">&#9632;</span>
+                Dashboard
+            </div>
         </div>
-        <div class="step" id="step-2">
-            <span class="step-num"><span>2</span></span>Select Call
+        <div class="nav-section">
+            <div class="nav-section-label">Stages</div>
+            <div class="nav-item" onclick="switchPage('stage-introduction')">
+                <span class="nav-icon">&#9898;</span>
+                Introduction
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
+            <div class="nav-item" onclick="switchPage('stage-discovery')">
+                <span class="nav-icon">&#9898;</span>
+                Discovery
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
+            <div class="nav-item" onclick="switchPage('stage-pitch')">
+                <span class="nav-icon">&#9898;</span>
+                Pitch
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
+            <div class="nav-item" onclick="switchPage('stage-close')">
+                <span class="nav-icon">&#9898;</span>
+                Close
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
         </div>
-        <div class="step" id="step-3">
-            <span class="step-num"><span>3</span></span>Review
+        <div class="nav-section">
+            <div class="nav-section-label">Tools</div>
+            <div class="nav-item" onclick="switchPage('leaderboard')">
+                <span class="nav-icon">&#9733;</span>
+                Leaderboard
+                <span class="nav-badge coming-soon">Soon</span>
+            </div>
+            <div class="nav-item" onclick="switchPage('portal')">
+                <span class="nav-icon">&#9998;</span>
+                Review Portal
+                <span class="nav-badge">Live</span>
+            </div>
         </div>
-        <div class="step" id="step-4">
-            <span class="step-num"><span>4</span></span>Send
-        </div>
+    </nav>
+    <div class="sidebar-footer">
+        AI-Powered Quality Assurance<br>
+        &copy; 2026 Trilogy Care
     </div>
+</aside>
 
-    <!-- Panel 1: Search -->
-    <div class="panel active" id="panel-1">
-        <div class="card">
-            <div class="card-title">Quick Review &mdash; Upload File</div>
-            <p class="text-muted" style="margin-bottom: 12px;">Upload a transcript (.txt) or call recording (.mp3/.wav/.m4a). Rep name is auto-detected from filename.</p>
-            <div id="file-upload-area" onclick="document.getElementById('transcript-file').click()" style="border: 2px dashed var(--gray-300); border-radius: 10px; padding: 28px 16px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; background: var(--white);">
-                <div style="font-size: 28px; margin-bottom: 6px; color: var(--gray-300);">&#127925;</div>
-                <div style="font-weight: 600; color: var(--gray-700); margin-bottom: 4px;" id="file-upload-label">Click to upload transcript or recording</div>
-                <div style="font-size: 12px; color: var(--gray-500);">.txt, .mp3, .wav, .m4a</div>
-                <input type="file" id="transcript-file" accept=".txt,.text,.mp3,.wav,.m4a,.ogg,.webm" style="display: none;" onchange="handleFileSelect(this)">
-            </div>
-            <div style="margin-top: 12px;">
-                <button class="btn btn-teal" id="quick-review-btn" onclick="quickReviewFromFile()" style="width: 100%;" disabled>Upload a file first</button>
-            </div>
-            <div id="quick-review-error" class="text-muted" style="color: var(--red); margin-top: 8px; display: none;"></div>
+<!-- Main -->
+<div class="main-wrapper">
+    <div class="topbar">
+        <div class="topbar-left">
+            <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">&#9776;</button>
+            <div class="topbar-title" id="topbar-title">Quality Dashboard</div>
         </div>
-        <div style="text-align: center; color: var(--gray-300); font-size: 13px; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px;">OR</div>
-        <div class="card">
-            <div class="card-title">Search for a sales representative</div>
-            <div class="search-group">
-                <input type="text" class="search-input" id="search-input"
-                       placeholder="Enter rep name (e.g. Sarah, Anthony, James...)"
-                       autocomplete="off">
-                <button class="btn btn-primary" id="search-btn" onclick="searchEmployee()">
-                    Search
-                </button>
+        <div class="topbar-right">
+            <div class="live-badge">
+                <div class="live-dot"></div>
+                Live Monitoring
             </div>
-            <ul class="employee-list" id="employee-list"></ul>
-        </div>
-    </div>
-
-    <!-- Panel 2: Calls -->
-    <div class="panel" id="panel-2">
-        <div class="card">
-            <div class="card-title" id="calls-title">Recent Calls</div>
-            <!-- Stats bar -->
-            <div id="calls-stats" style="display:none; margin-bottom: 16px; gap: 16px; flex-wrap: wrap;">
-                <div style="background: rgba(67,192,190,0.08); border: 1px solid rgba(67,192,190,0.2); border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 140px;">
-                    <div style="font-size: 24px; font-weight: 700; color: var(--navy);" id="stat-total-calls">0</div>
-                    <div style="font-size: 12px; color: var(--gray-500); font-weight: 500;">Total Calls</div>
-                </div>
-                <div style="background: rgba(67,192,190,0.08); border: 1px solid rgba(67,192,190,0.2); border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 140px;">
-                    <div style="font-size: 24px; font-weight: 700; color: var(--dark-teal);" id="stat-unique-clients">0</div>
-                    <div style="font-size: 12px; color: var(--gray-500); font-weight: 500;">Unique Clients Today</div>
-                </div>
-                <div style="background: rgba(67,192,190,0.08); border: 1px solid rgba(67,192,190,0.2); border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 140px;">
-                    <div style="font-size: 24px; font-weight: 700; color: var(--navy);" id="stat-today-calls">0</div>
-                    <div style="font-size: 12px; color: var(--gray-500); font-weight: 500;">Calls Today</div>
-                </div>
-            </div>
-            <!-- Date filter -->
-            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                <button class="btn btn-sm btn-teal" id="filter-today" onclick="filterCalls('today')">Today</button>
-                <button class="btn btn-sm btn-outline" id="filter-week" onclick="filterCalls('week')">This Week</button>
-                <button class="btn btn-sm btn-outline" id="filter-all" onclick="filterCalls('all')">Last 90 Days</button>
-            </div>
-            <p class="text-muted" id="calls-subtitle">Select the call to review</p>
-            <ul class="call-list" id="call-list"></ul>
-            <div class="mt-12">
-                <button class="btn btn-outline btn-sm" onclick="goToStep(1)">Back to search</button>
-            </div>
+            <select class="period-select" id="period-select">
+                <option value="7">Last 7 Days</option>
+                <option value="30" selected>Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+            </select>
         </div>
     </div>
 
-    <!-- Panel 3: Review -->
-    <div class="panel" id="panel-3">
-        <div class="card">
-            <div class="card-title">Generating Review</div>
+    <div class="page-content">
 
-            <div class="status-bar visible" id="status-bar">
-                <div class="status-message" id="status-message">
-                    <div class="spinner" id="status-spinner"></div>
-                    <span id="status-text">Preparing...</span>
+        <!-- ===== PAGE: Dashboard ===== -->
+        <div class="page active" id="page-dashboard">
+            <!-- KPI Cards -->
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-teal">
+                    <div class="kpi-label">Calls Reviewed</div>
+                    <div class="kpi-value">--</div>
+                    <div class="kpi-trend up">&#9650; --</div>
+                    <div class="kpi-sub">vs previous period</div>
                 </div>
-                <div class="progress-track" id="progress-track">
-                    <div class="progress-fill" id="progress-fill"></div>
+                <div class="kpi-card kpi-navy">
+                    <div class="kpi-label">Team Avg Score</div>
+                    <div class="kpi-value">--%</div>
+                    <div class="kpi-trend up">&#9650; --</div>
+                    <div class="kpi-sub">out of 100</div>
+                </div>
+                <div class="kpi-card kpi-green">
+                    <div class="kpi-label">A+ Scores</div>
+                    <div class="kpi-value">--</div>
+                    <div class="kpi-sub">90%+ calls this period</div>
+                </div>
+                <div class="kpi-card kpi-orange">
+                    <div class="kpi-label">Below 60%</div>
+                    <div class="kpi-value">--</div>
+                    <div class="kpi-sub">needs coaching support</div>
                 </div>
             </div>
 
-            <div class="review-result" id="review-result">
-                <!-- Grade card -->
-                <div class="grade-card" id="grade-card">
-                    <div class="grade-label">Overall Grade</div>
-                    <div class="grade-value" id="grade-value">--</div>
-                    <div class="grade-detail" id="grade-detail"></div>
+            <!-- Stage Performance Overview -->
+            <div class="card full-width" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    <div class="card-title">Stage Performance (Team Average)</div>
+                </div>
+                <div class="card-body">
+                    <div class="stage-metric-grid">
+                        <div class="stage-metric">
+                            <div class="stage-metric-label">Introduction</div>
+                            <div class="stage-metric-value">--<span class="stage-metric-max">/15</span></div>
+                        </div>
+                        <div class="stage-metric">
+                            <div class="stage-metric-label">Discovery</div>
+                            <div class="stage-metric-value">--<span class="stage-metric-max">/35</span></div>
+                        </div>
+                        <div class="stage-metric">
+                            <div class="stage-metric-label">Pitch</div>
+                            <div class="stage-metric-value">--<span class="stage-metric-max">/35</span></div>
+                        </div>
+                        <div class="stage-metric">
+                            <div class="stage-metric-label">Close</div>
+                            <div class="stage-metric-value">--<span class="stage-metric-max">/15</span></div>
+                        </div>
+                    </div>
+                    <div class="coming-soon-overlay" style="text-align:center; padding: 8px 0;">
+                        <p class="text-muted">Live data will populate automatically as calls are reviewed</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two column: Leaderboard + Recent Reviews -->
+            <div class="two-col">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Top Performers</div>
+                    </div>
+                    <div class="card-body card-body-flush">
+                        <table class="lb-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Rep</th>
+                                    <th>Score</th>
+                                    <th>Grade</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="lb-rank gold">1</td>
+                                    <td><div class="lb-name">Aprocina Anthony</div><div class="lb-role">Sales Representative</div></td>
+                                    <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:92%"></div></div><span class="lb-score-num">92</span></div></td>
+                                    <td><span class="lb-grade a-plus">A+</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="lb-rank silver">2</td>
+                                    <td><div class="lb-name">Sarah Palmer</div><div class="lb-role">Sales Representative</div></td>
+                                    <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:85%"></div></div><span class="lb-score-num">85</span></div></td>
+                                    <td><span class="lb-grade a">A</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="lb-rank bronze">3</td>
+                                    <td><div class="lb-name">James Mitchell</div><div class="lb-role">Sales Representative</div></td>
+                                    <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:81%"></div></div><span class="lb-score-num">81</span></div></td>
+                                    <td><span class="lb-grade a">A</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="lb-rank">4</td>
+                                    <td><div class="lb-name">Anthony Nguyen</div><div class="lb-role">Sales Representative</div></td>
+                                    <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:74%"></div></div><span class="lb-score-num">74</span></div></td>
+                                    <td><span class="lb-grade b">B</span></td>
+                                </tr>
+                                <tr>
+                                    <td class="lb-rank">5</td>
+                                    <td><div class="lb-name">Maria Santos</div><div class="lb-role">Sales Representative</div></td>
+                                    <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:71%"></div></div><span class="lb-score-num">71</span></div></td>
+                                    <td><span class="lb-grade b">B</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                <!-- Scores -->
-                <div class="card-title mt-20">Score Breakdown</div>
-                <div class="scores-grid" id="scores-grid"></div>
-
-                <!-- Stage Flow -->
-                <div class="card-title mt-20">Stage Flow</div>
-                <ul id="highlights-list" style="padding-left: 0; margin-top: 8px;"></ul>
-
-                <!-- Top strength & focus -->
-                <div class="card-title mt-20">Top Strength</div>
-                <p id="top-strength" style="margin-top: 4px; color: var(--gray-700);"></p>
-
-                <div class="card-title mt-20">Focus On</div>
-                <p id="top-dev" style="margin-top: 4px; color: var(--gray-700);"></p>
-
-                <div class="mt-20" style="display: flex; gap: 12px;">
-                    <button class="btn btn-teal" onclick="showEmailPreview()">Send to Rep</button>
-                    <a class="btn btn-outline" id="download-link" href="#" download>Download .docx</a>
-                    <button class="btn btn-outline" onclick="goToStep(1)">New Review</button>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Recent Reviews</div>
+                    </div>
+                    <div class="card-body card-body-flush">
+                        <div class="review-item">
+                            <div class="review-avatar">AP</div>
+                            <div class="review-info">
+                                <div class="review-name">Aprocina Anthony</div>
+                                <div class="review-meta">2 May 2026 &middot; Inbound &middot; 14 min</div>
+                            </div>
+                            <div class="review-score" style="color: var(--dark-teal);">92%</div>
+                        </div>
+                        <div class="review-item">
+                            <div class="review-avatar">SP</div>
+                            <div class="review-info">
+                                <div class="review-name">Sarah Palmer</div>
+                                <div class="review-meta">1 May 2026 &middot; Outbound &middot; 22 min</div>
+                            </div>
+                            <div class="review-score" style="color: var(--dark-teal);">85%</div>
+                        </div>
+                        <div class="review-item">
+                            <div class="review-avatar">JM</div>
+                            <div class="review-info">
+                                <div class="review-name">James Mitchell</div>
+                                <div class="review-meta">30 Apr 2026 &middot; Inbound &middot; 18 min</div>
+                            </div>
+                            <div class="review-score" style="color: var(--dark-teal);">81%</div>
+                        </div>
+                        <div class="review-item">
+                            <div class="review-avatar">AN</div>
+                            <div class="review-info">
+                                <div class="review-name">Anthony Nguyen</div>
+                                <div class="review-meta">29 Apr 2026 &middot; Outbound &middot; 11 min</div>
+                            </div>
+                            <div class="review-score" style="color: var(--orange);">74%</div>
+                        </div>
+                        <div class="review-item">
+                            <div class="review-avatar">MS</div>
+                            <div class="review-info">
+                                <div class="review-name">Maria Santos</div>
+                                <div class="review-meta">28 Apr 2026 &middot; Inbound &middot; 9 min</div>
+                            </div>
+                            <div class="review-score" style="color: var(--orange);">71%</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Panel 4: Email -->
-    <div class="panel" id="panel-4">
-        <div class="card">
-            <div class="card-title">Email Preview</div>
-            <p class="text-muted">Review before sending</p>
-
-            <div class="email-preview visible" id="email-preview-content">
-                <div class="email-field">
-                    <div class="email-field-label">From</div>
-                    <div class="email-field-value">anesut@trilogycare.com.au</div>
-                </div>
-                <div class="email-field">
-                    <div class="email-field-label">To</div>
-                    <div class="email-field-value" id="email-to"></div>
-                </div>
-                <div class="email-field">
-                    <div class="email-field-label">Subject</div>
-                    <div class="email-field-value" id="email-subject"></div>
-                </div>
-                <div class="email-field">
-                    <div class="email-field-label">Attachment</div>
-                    <div class="email-field-value" id="email-attachment"></div>
-                </div>
-                <div class="email-body" id="email-body"></div>
-
-                <div class="email-actions">
-                    <button class="btn btn-teal" id="send-btn" onclick="sendEmail()">
-                        Confirm &amp; Send
-                    </button>
-                    <button class="btn btn-outline" onclick="goToStep(3)">Back to Review</button>
+        <!-- ===== PAGE: Leaderboard ===== -->
+        <div class="page" id="page-leaderboard">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Live Leaderboard Coming Soon
+                    <small>Data will auto-populate as calls are reviewed by AI</small>
                 </div>
             </div>
-
-            <div class="sent-confirmation" id="sent-confirmation">
-                <div class="sent-icon">&#10003;</div>
-                <div class="sent-title">Email Sent</div>
-                <div class="sent-detail" id="sent-detail"></div>
-                <div class="mt-20">
-                    <button class="btn btn-primary" onclick="goToStep(1)">Start New Review</button>
+            <div class="card blurred">
+                <div class="card-header">
+                    <div class="card-title">Sales Team Leaderboard</div>
+                </div>
+                <div class="card-body">
+                    <!-- Stage tabs within leaderboard -->
+                    <div class="stage-tabs">
+                        <div class="stage-tab active">Overall<span class="tab-weight">/100</span></div>
+                        <div class="stage-tab">Introduction<span class="tab-weight">/15</span></div>
+                        <div class="stage-tab">Discovery<span class="tab-weight">/35</span></div>
+                        <div class="stage-tab">Pitch<span class="tab-weight">/35</span></div>
+                        <div class="stage-tab">Close<span class="tab-weight">/15</span></div>
+                    </div>
+                    <table class="lb-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Rep</th>
+                                <th>Overall</th>
+                                <th>Intro</th>
+                                <th>Discovery</th>
+                                <th>Pitch</th>
+                                <th>Close</th>
+                                <th>Grade</th>
+                                <th>Reviews</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="lb-rank gold">1</td>
+                                <td><div class="lb-name">Aprocina Anthony</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:92%"></div></div><span class="lb-score-num">92</span></div></td>
+                                <td>14</td>
+                                <td>32</td>
+                                <td>33</td>
+                                <td>13</td>
+                                <td><span class="lb-grade a-plus">A+</span></td>
+                                <td>12</td>
+                            </tr>
+                            <tr>
+                                <td class="lb-rank silver">2</td>
+                                <td><div class="lb-name">Sarah Palmer</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:85%"></div></div><span class="lb-score-num">85</span></div></td>
+                                <td>13</td>
+                                <td>30</td>
+                                <td>30</td>
+                                <td>12</td>
+                                <td><span class="lb-grade a">A</span></td>
+                                <td>9</td>
+                            </tr>
+                            <tr>
+                                <td class="lb-rank bronze">3</td>
+                                <td><div class="lb-name">James Mitchell</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill high" style="width:81%"></div></div><span class="lb-score-num">81</span></div></td>
+                                <td>12</td>
+                                <td>28</td>
+                                <td>29</td>
+                                <td>12</td>
+                                <td><span class="lb-grade a">A</span></td>
+                                <td>8</td>
+                            </tr>
+                            <tr>
+                                <td class="lb-rank">4</td>
+                                <td><div class="lb-name">Anthony Nguyen</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:74%"></div></div><span class="lb-score-num">74</span></div></td>
+                                <td>11</td>
+                                <td>26</td>
+                                <td>25</td>
+                                <td>12</td>
+                                <td><span class="lb-grade b">B</span></td>
+                                <td>11</td>
+                            </tr>
+                            <tr>
+                                <td class="lb-rank">5</td>
+                                <td><div class="lb-name">Maria Santos</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:71%"></div></div><span class="lb-score-num">71</span></div></td>
+                                <td>10</td>
+                                <td>25</td>
+                                <td>24</td>
+                                <td>12</td>
+                                <td><span class="lb-grade b">B</span></td>
+                                <td>7</td>
+                            </tr>
+                            <tr>
+                                <td class="lb-rank">6</td>
+                                <td><div class="lb-name">David Chen</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill mid" style="width:68%"></div></div><span class="lb-score-num">68</span></div></td>
+                                <td>10</td>
+                                <td>23</td>
+                                <td>24</td>
+                                <td>11</td>
+                                <td><span class="lb-grade c">C</span></td>
+                                <td>6</td>
+                            </tr>
+                            <tr>
+                                <td class="lb-rank">7</td>
+                                <td><div class="lb-name">Rachel Kim</div></td>
+                                <td><div class="lb-score-bar"><div class="lb-bar-track"><div class="lb-bar-fill low" style="width:58%"></div></div><span class="lb-score-num">58</span></div></td>
+                                <td>9</td>
+                                <td>20</td>
+                                <td>19</td>
+                                <td>10</td>
+                                <td><span class="lb-grade c">D</span></td>
+                                <td>4</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
+
+        <!-- ===== PAGE: Stage Detail (Introduction) ===== -->
+        <div class="page" id="page-stage-introduction">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Introduction Stage Analytics Coming Soon
+                    <small>Track warm greetings, clear introductions &amp; purpose statements across the team</small>
+                </div>
+            </div>
+            <div class="blurred">
+                <div class="kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="kpi-card kpi-teal">
+                        <div class="kpi-label">Warm Greeting</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/5</span></div>
+                        <div class="kpi-sub">Team average</div>
+                    </div>
+                    <div class="kpi-card kpi-navy">
+                        <div class="kpi-label">Clear Introduction</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/5</span></div>
+                        <div class="kpi-sub">Team average</div>
+                    </div>
+                    <div class="kpi-card kpi-green">
+                        <div class="kpi-label">Purpose Statement</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/5</span></div>
+                        <div class="kpi-sub">Team average</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-title">Introduction Scores by Rep</div></div>
+                    <div class="card-body card-body-flush">
+                        <table class="lb-table">
+                            <thead><tr><th>#</th><th>Rep</th><th>Greeting /5</th><th>Introduction /5</th><th>Purpose /5</th><th>Total /15</th></tr></thead>
+                            <tbody>
+                                <tr><td class="lb-rank gold">1</td><td class="lb-name">Aprocina Anthony</td><td>5</td><td>5</td><td>4</td><td><strong>14</strong></td></tr>
+                                <tr><td class="lb-rank silver">2</td><td class="lb-name">Sarah Palmer</td><td>4</td><td>5</td><td>4</td><td><strong>13</strong></td></tr>
+                                <tr><td class="lb-rank bronze">3</td><td class="lb-name">James Mitchell</td><td>4</td><td>4</td><td>4</td><td><strong>12</strong></td></tr>
+                                <tr><td class="lb-rank">4</td><td class="lb-name">Anthony Nguyen</td><td>4</td><td>4</td><td>3</td><td><strong>11</strong></td></tr>
+                                <tr><td class="lb-rank">5</td><td class="lb-name">Maria Santos</td><td>3</td><td>4</td><td>3</td><td><strong>10</strong></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PAGE: Stage Detail (Discovery) ===== -->
+        <div class="page" id="page-stage-discovery">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Discovery Stage Analytics Coming Soon
+                    <small>Track trigger identification, care situation mapping &amp; urgency assessment</small>
+                </div>
+            </div>
+            <div class="blurred">
+                <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="kpi-card kpi-teal">
+                        <div class="kpi-label">Care Situation</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/8</span></div>
+                    </div>
+                    <div class="kpi-card kpi-navy">
+                        <div class="kpi-label">Biggest Challenge</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/8</span></div>
+                    </div>
+                    <div class="kpi-card kpi-green">
+                        <div class="kpi-label">Daily Impact</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/7</span></div>
+                    </div>
+                    <div class="kpi-card kpi-orange">
+                        <div class="kpi-label">Ideal Vision</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/6</span></div>
+                    </div>
+                    <div class="kpi-card kpi-teal">
+                        <div class="kpi-label">Timeline</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/6</span></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-title">Discovery Scores by Rep</div></div>
+                    <div class="card-body card-body-flush">
+                        <table class="lb-table">
+                            <thead><tr><th>#</th><th>Rep</th><th>Situation /8</th><th>Challenge /8</th><th>Impact /7</th><th>Vision /6</th><th>Timeline /6</th><th>Total /35</th></tr></thead>
+                            <tbody>
+                                <tr><td class="lb-rank gold">1</td><td class="lb-name">Aprocina Anthony</td><td>7</td><td>7</td><td>6</td><td>6</td><td>6</td><td><strong>32</strong></td></tr>
+                                <tr><td class="lb-rank silver">2</td><td class="lb-name">Sarah Palmer</td><td>7</td><td>6</td><td>6</td><td>5</td><td>6</td><td><strong>30</strong></td></tr>
+                                <tr><td class="lb-rank bronze">3</td><td class="lb-name">James Mitchell</td><td>6</td><td>6</td><td>6</td><td>5</td><td>5</td><td><strong>28</strong></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PAGE: Stage Detail (Pitch) ===== -->
+        <div class="page" id="page-stage-pitch">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Pitch Stage Analytics Coming Soon
+                    <small>Track trigger recaps, solution alignment &amp; comprehension checks</small>
+                </div>
+            </div>
+            <div class="blurred">
+                <div class="kpi-grid">
+                    <div class="kpi-card kpi-teal">
+                        <div class="kpi-label">Trigger Recap</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/8</span></div>
+                    </div>
+                    <div class="kpi-card kpi-navy">
+                        <div class="kpi-label">Solution Alignment</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/10</span></div>
+                    </div>
+                    <div class="kpi-card kpi-green">
+                        <div class="kpi-label">Relevant Services</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/9</span></div>
+                    </div>
+                    <div class="kpi-card kpi-orange">
+                        <div class="kpi-label">Comprehension Check</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/8</span></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-title">Pitch Scores by Rep</div></div>
+                    <div class="card-body card-body-flush">
+                        <table class="lb-table">
+                            <thead><tr><th>#</th><th>Rep</th><th>Recap /8</th><th>Alignment /10</th><th>Services /9</th><th>Check /8</th><th>Total /35</th></tr></thead>
+                            <tbody>
+                                <tr><td class="lb-rank gold">1</td><td class="lb-name">Aprocina Anthony</td><td>8</td><td>9</td><td>8</td><td>8</td><td><strong>33</strong></td></tr>
+                                <tr><td class="lb-rank silver">2</td><td class="lb-name">Sarah Palmer</td><td>7</td><td>8</td><td>8</td><td>7</td><td><strong>30</strong></td></tr>
+                                <tr><td class="lb-rank bronze">3</td><td class="lb-name">James Mitchell</td><td>7</td><td>8</td><td>7</td><td>7</td><td><strong>29</strong></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PAGE: Stage Detail (Close) ===== -->
+        <div class="page" id="page-stage-close">
+            <div class="coming-soon-overlay">
+                <div class="coming-soon-banner">
+                    Close Stage Analytics Coming Soon
+                    <small>Track closing questions, objection handling &amp; next steps confirmation</small>
+                </div>
+            </div>
+            <div class="blurred">
+                <div class="kpi-grid">
+                    <div class="kpi-card kpi-teal">
+                        <div class="kpi-label">Closing Question</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/4</span></div>
+                    </div>
+                    <div class="kpi-card kpi-navy">
+                        <div class="kpi-label">Pause & Listen</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/3</span></div>
+                    </div>
+                    <div class="kpi-card kpi-green">
+                        <div class="kpi-label">Objection Handling</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/4</span></div>
+                    </div>
+                    <div class="kpi-card kpi-orange">
+                        <div class="kpi-label">Next Steps</div>
+                        <div class="kpi-value">--<span style="font-size:18px;color:var(--gray-300)">/4</span></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><div class="card-title">Close Scores by Rep</div></div>
+                    <div class="card-body card-body-flush">
+                        <table class="lb-table">
+                            <thead><tr><th>#</th><th>Rep</th><th>Question /4</th><th>Pause /3</th><th>Objections /4</th><th>Next Steps /4</th><th>Total /15</th></tr></thead>
+                            <tbody>
+                                <tr><td class="lb-rank gold">1</td><td class="lb-name">Aprocina Anthony</td><td>4</td><td>3</td><td>3</td><td>3</td><td><strong>13</strong></td></tr>
+                                <tr><td class="lb-rank silver">2</td><td class="lb-name">Sarah Palmer</td><td>3</td><td>3</td><td>3</td><td>3</td><td><strong>12</strong></td></tr>
+                                <tr><td class="lb-rank bronze">3</td><td class="lb-name">James Mitchell</td><td>3</td><td>3</td><td>3</td><td>3</td><td><strong>12</strong></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== PAGE: Review Portal (existing functionality) ===== -->
+        <div class="page" id="page-portal">
+            <div class="portal-container">
+                <!-- Steps -->
+                <div class="steps">
+                    <div class="step active" id="step-1">
+                        <span class="step-num"><span>1</span></span>Find Rep
+                    </div>
+                    <div class="step" id="step-2">
+                        <span class="step-num"><span>2</span></span>Select Call
+                    </div>
+                    <div class="step" id="step-3">
+                        <span class="step-num"><span>3</span></span>Review
+                    </div>
+                    <div class="step" id="step-4">
+                        <span class="step-num"><span>4</span></span>Send
+                    </div>
+                </div>
+
+                <!-- Panel 1: Search -->
+                <div class="panel active" id="panel-1">
+                    <div class="portal-card">
+                        <div class="portal-card-title">Quick Review &mdash; Upload File</div>
+                        <p class="text-muted" style="margin-bottom: 12px;">Upload a transcript (.txt) or call recording (.mp3/.wav/.m4a). Rep name is auto-detected from filename.</p>
+                        <div id="file-upload-area" onclick="document.getElementById('transcript-file').click()" style="border: 2px dashed var(--gray-300); border-radius: 10px; padding: 28px 16px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; background: var(--white);">
+                            <div style="font-size: 28px; margin-bottom: 6px; color: var(--gray-300);">&#127925;</div>
+                            <div style="font-weight: 600; color: var(--gray-700); margin-bottom: 4px;" id="file-upload-label">Click to upload transcript or recording</div>
+                            <div style="font-size: 12px; color: var(--gray-500);">.txt, .mp3, .wav, .m4a</div>
+                            <input type="file" id="transcript-file" accept=".txt,.text,.mp3,.wav,.m4a,.ogg,.webm" style="display: none;" onchange="handleFileSelect(this)">
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button class="btn btn-teal" id="quick-review-btn" onclick="quickReviewFromFile()" style="width: 100%;" disabled>Upload a file first</button>
+                        </div>
+                        <div id="quick-review-error" class="text-muted" style="color: var(--red); margin-top: 8px; display: none;"></div>
+                    </div>
+                    <div style="text-align: center; color: var(--gray-300); font-size: 13px; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px;">OR</div>
+                    <div class="portal-card">
+                        <div class="portal-card-title">Search for a sales representative</div>
+                        <div class="search-group">
+                            <input type="text" class="search-input" id="search-input"
+                                   placeholder="Enter rep name (e.g. Sarah, Anthony, James...)"
+                                   autocomplete="off">
+                            <button class="btn btn-primary" id="search-btn" onclick="searchEmployee()">
+                                Search
+                            </button>
+                        </div>
+                        <ul class="employee-list" id="employee-list"></ul>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Calls -->
+                <div class="panel" id="panel-2">
+                    <div class="portal-card">
+                        <div class="portal-card-title" id="calls-title">Recent Calls</div>
+                        <div id="calls-stats" style="display:none; margin-bottom: 16px; gap: 16px; flex-wrap: wrap;">
+                            <div style="background: rgba(67,192,190,0.08); border: 1px solid rgba(67,192,190,0.2); border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 140px;">
+                                <div style="font-size: 24px; font-weight: 700; color: var(--navy);" id="stat-total-calls">0</div>
+                                <div style="font-size: 12px; color: var(--gray-500); font-weight: 500;">Total Calls</div>
+                            </div>
+                            <div style="background: rgba(67,192,190,0.08); border: 1px solid rgba(67,192,190,0.2); border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 140px;">
+                                <div style="font-size: 24px; font-weight: 700; color: var(--dark-teal);" id="stat-unique-clients">0</div>
+                                <div style="font-size: 12px; color: var(--gray-500); font-weight: 500;">Unique Clients Today</div>
+                            </div>
+                            <div style="background: rgba(67,192,190,0.08); border: 1px solid rgba(67,192,190,0.2); border-radius: 8px; padding: 12px 18px; flex: 1; min-width: 140px;">
+                                <div style="font-size: 24px; font-weight: 700; color: var(--navy);" id="stat-today-calls">0</div>
+                                <div style="font-size: 12px; color: var(--gray-500); font-weight: 500;">Calls Today</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                            <button class="btn btn-sm btn-teal" id="filter-today" onclick="filterCalls('today')">Today</button>
+                            <button class="btn btn-sm btn-outline" id="filter-week" onclick="filterCalls('week')">This Week</button>
+                            <button class="btn btn-sm btn-outline" id="filter-all" onclick="filterCalls('all')">Last 90 Days</button>
+                        </div>
+                        <p class="text-muted" id="calls-subtitle">Select the call to review</p>
+                        <ul class="call-list" id="call-list"></ul>
+                        <div class="mt-12">
+                            <button class="btn btn-outline btn-sm" onclick="goToStep(1)">Back to search</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 3: Review -->
+                <div class="panel" id="panel-3">
+                    <div class="portal-card">
+                        <div class="portal-card-title">Generating Review</div>
+
+                        <div class="status-bar visible" id="status-bar">
+                            <div class="status-message" id="status-message">
+                                <div class="spinner" id="status-spinner"></div>
+                                <span id="status-text">Preparing...</span>
+                            </div>
+                            <div class="progress-track" id="progress-track">
+                                <div class="progress-fill" id="progress-fill"></div>
+                            </div>
+                        </div>
+
+                        <div class="review-result" id="review-result">
+                            <div class="grade-card" id="grade-card">
+                                <div class="grade-label">Overall Grade</div>
+                                <div class="grade-value" id="grade-value">--</div>
+                                <div class="grade-detail" id="grade-detail"></div>
+                            </div>
+
+                            <div class="portal-card-title mt-20">Score Breakdown</div>
+                            <div class="scores-grid" id="scores-grid"></div>
+
+                            <!-- Stage Flow -->
+                            <div class="portal-card-title mt-20">Stage Flow</div>
+                            <ul id="highlights-list" style="padding-left: 0; margin-top: 8px;"></ul>
+
+                            <!-- Top strength & focus -->
+                            <div class="portal-card-title mt-20">Top Strength</div>
+                            <p id="top-strength" style="margin-top: 4px; color: var(--gray-700);"></p>
+
+                            <div class="portal-card-title mt-20">Focus On</div>
+                            <p id="top-dev" style="margin-top: 4px; color: var(--gray-700);"></p>
+
+                            <div class="mt-20" style="display: flex; gap: 12px;">
+                                <button class="btn btn-teal" onclick="showEmailPreview()">Send to Rep</button>
+                                <a class="btn btn-outline" id="download-link" href="#" download>Download .docx</a>
+                                <button class="btn btn-outline" onclick="goToStep(1)">New Review</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 4: Email -->
+                <div class="panel" id="panel-4">
+                    <div class="portal-card">
+                        <div class="portal-card-title">Email Preview</div>
+                        <p class="text-muted">Review before sending</p>
+
+                        <div class="email-preview visible" id="email-preview-content">
+                            <div class="email-field">
+                                <div class="email-field-label">From</div>
+                                <div class="email-field-value">anesut@trilogycare.com.au</div>
+                            </div>
+                            <div class="email-field">
+                                <div class="email-field-label">To</div>
+                                <div class="email-field-value" id="email-to"></div>
+                            </div>
+                            <div class="email-field">
+                                <div class="email-field-label">Subject</div>
+                                <div class="email-field-value" id="email-subject"></div>
+                            </div>
+                            <div class="email-field">
+                                <div class="email-field-label">Attachment</div>
+                                <div class="email-field-value" id="email-attachment"></div>
+                            </div>
+                            <div class="email-body" id="email-body"></div>
+
+                            <div class="email-actions">
+                                <button class="btn btn-teal" id="send-btn" onclick="sendEmail()">
+                                    Confirm &amp; Send
+                                </button>
+                                <button class="btn btn-outline" onclick="goToStep(3)">Back to Review</button>
+                            </div>
+                        </div>
+
+                        <div class="sent-confirmation" id="sent-confirmation">
+                            <div class="sent-icon">&#10003;</div>
+                            <div class="sent-title">Email Sent</div>
+                            <div class="sent-detail" id="sent-detail"></div>
+                            <div class="mt-20">
+                                <button class="btn btn-primary" onclick="goToStep(1)">Start New Review</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <script>
-    // ---- State ----
+    // ===== Page Navigation =====
+    function switchPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const page = document.getElementById('page-' + pageId);
+        if (page) page.classList.add('active');
+        event.currentTarget.classList.add('active');
+
+        const titles = {
+            'dashboard': 'Quality Dashboard',
+            'leaderboard': 'Team Leaderboard',
+            'portal': 'Review Portal',
+            'stage-introduction': 'Introduction Stage',
+            'stage-discovery': 'Discovery Stage',
+            'stage-pitch': 'Pitch Stage',
+            'stage-close': 'Close Stage',
+        };
+        document.getElementById('topbar-title').textContent = titles[pageId] || 'Dashboard';
+
+        // Close mobile sidebar
+        document.getElementById('sidebar').classList.remove('open');
+    }
+
+    // ===== Portal Logic (preserved from original) =====
     let state = {
         employee: null,
         aircallUserId: null,
@@ -712,7 +1643,6 @@
         reviewData: null,
     };
 
-    // ---- Step navigation ----
     function goToStep(n) {
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.step').forEach((s, i) => {
@@ -722,7 +1652,6 @@
         });
         document.getElementById(`panel-${n}`).classList.add('active');
 
-        // Reset review state when going back to step 1
         if (n === 1) {
             state = { employee: null, aircallUserId: null, selectedCall: null, reviewData: null };
             document.getElementById('review-result').classList.remove('visible');
@@ -733,8 +1662,7 @@
         }
     }
 
-    // ---- Search ----
-    // Drag and drop support for file upload
+    // Drag and drop
     const dropArea = document.getElementById('file-upload-area');
     if (dropArea) {
         dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.borderColor = 'var(--teal)'; dropArea.style.background = 'var(--gray-50)'; });
@@ -789,9 +1717,9 @@
         } finally { btn.disabled = false; btn.textContent = isAudio ? 'Transcribe & Review' : 'Review Transcript'; }
     }
 
-    function quickReviewFromTranscript() { quickReviewFromFile(); }
+    let pollTimer = null;
 
-        function pollForQuickReview(jobId) {
+    function pollForQuickReview(jobId) {
         const statusBar = document.getElementById('status-bar');
         const statusText = document.getElementById('status-text');
         const statusSpinner = document.getElementById('status-spinner');
@@ -838,59 +1766,34 @@
     async function searchEmployee() {
         const name = document.getElementById('search-input').value.trim();
         if (!name) return;
-
         const btn = document.getElementById('search-btn');
-        btn.disabled = true;
-        btn.textContent = 'Searching...';
-
+        btn.disabled = true; btn.textContent = 'Searching...';
         try {
-            const res = await fetch('/api/search-employee', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            });
+            const res = await fetch('/api/search-employee', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
             const data = await res.json();
             renderEmployeeList(data);
-        } catch (err) {
-            alert('Search failed: ' + err.message);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Search';
-        }
+        } catch (err) { alert('Search failed: ' + err.message); }
+        finally { btn.disabled = false; btn.textContent = 'Search'; }
     }
 
     function renderEmployeeList(data) {
         const list = document.getElementById('employee-list');
         list.innerHTML = '';
-
-        // Parse employees from MCP response format: {result: {employees: [...]}}
         let employees = [];
-        if (Array.isArray(data)) {
-            employees = data;
-        } else if (data.result && data.result.employees) {
-            employees = data.result.employees;
-        } else if (data.result && Array.isArray(data.result)) {
-            employees = data.result;
-        } else if (data.employees) {
-            employees = data.employees;
-        } else if (data.results) {
-            employees = data.results;
-        } else if (data.raw) {
-            try { employees = JSON.parse(data.raw); } catch(e) {}
-            if (!Array.isArray(employees)) {
-                list.innerHTML = '<li class="text-muted mt-12">Could not parse employee data.</li>';
-                return;
-            }
-        }
+        if (Array.isArray(data)) { employees = data; }
+        else if (data.result && data.result.employees) { employees = data.result.employees; }
+        else if (data.result && Array.isArray(data.result)) { employees = data.result; }
+        else if (data.employees) { employees = data.employees; }
+        else if (data.results) { employees = data.results; }
+        else if (data.raw) { try { employees = JSON.parse(data.raw); } catch(e) {} }
 
-        if (!employees.length) {
+        if (!Array.isArray(employees) || !employees.length) {
             list.innerHTML = '<li class="text-muted mt-12">No employees found. Try a different name.</li>';
             return;
         }
 
         employees.forEach(emp => {
             const name = emp.full_name || emp.name || emp.display_name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
-            // title field from MCP is "EST-310 Sales Representative" — split it
             const titleRaw = emp.title || '';
             const estMatch = titleRaw.match(/(EST-\d+)\s*(.*)/);
             const estId = emp.employee_id || emp.est_id || (estMatch ? estMatch[1] : '') || emp.id || '';
@@ -908,54 +1811,21 @@
                 </div>
                 <div class="emp-arrow">&#8594;</div>
             `;
-            li.addEventListener('click', () => selectEmployee({
-                name, role, department: dept, email, est_id: estId, raw: emp
-            }));
+            li.addEventListener('click', () => selectEmployee({ name, role, department: dept, email, est_id: estId, raw: emp }));
             list.appendChild(li);
         });
     }
 
     async function selectEmployee(emp) {
         state.employee = emp;
-
-        // Highlight selected
         document.querySelectorAll('.employee-item').forEach(el => el.classList.remove('selected'));
         event.currentTarget.classList.add('selected');
-
-        // Move to step 2 and load calls directly by email
         goToStep(2);
         document.getElementById('calls-title').textContent = `Recent Calls — ${emp.name}`;
         document.getElementById('calls-subtitle').textContent = 'Loading calls...';
         document.getElementById('call-list').innerHTML = '';
-
-        if (!emp.email) {
-            document.getElementById('calls-subtitle').textContent = 'No email found for this employee — cannot look up Aircall calls.';
-            return;
-        }
-
-        try {
-            await loadCalls(emp.email);
-        } catch (err) {
-            document.getElementById('calls-subtitle').textContent = 'Failed to load calls: ' + err.message;
-        }
-    }
-
-    function parseAircallUsers(data) {
-        if (Array.isArray(data)) return data;
-        if (data.users) return data.users;
-        if (data.raw) { try { const p = JSON.parse(data.raw); return p.users || p || []; } catch(e) {} }
-        if (data.content) {
-            try {
-                const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
-                if (Array.isArray(parsed)) return parsed;
-                if (parsed.users) return parsed.users;
-                if (Array.isArray(parsed.content)) {
-                    const t = parsed.content.find(c => c.type === 'text');
-                    if (t) { const p2 = JSON.parse(t.text); return p2.users || p2 || []; }
-                }
-            } catch(e) {}
-        }
-        return [];
+        if (!emp.email) { document.getElementById('calls-subtitle').textContent = 'No email found for this employee.'; return; }
+        try { await loadCalls(emp.email); } catch (err) { document.getElementById('calls-subtitle').textContent = 'Failed to load calls: ' + err.message; }
     }
 
     let currentDateFilter = 'today';
@@ -974,133 +1844,61 @@
 
     async function loadCalls(userEmail, dateFilter) {
         try {
-            const res = await fetch('/api/calls', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_email: userEmail, date: dateFilter || currentDateFilter })
-            });
+            const res = await fetch('/api/calls', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_email: userEmail, date: dateFilter || currentDateFilter }) });
             const data = await res.json();
             renderCallList(data);
-        } catch(err) {
-            document.getElementById('calls-subtitle').textContent = 'Failed to load calls.';
-        }
+        } catch(err) { document.getElementById('calls-subtitle').textContent = 'Failed to load calls.'; }
     }
 
     function renderCallList(data) {
         const list = document.getElementById('call-list');
         list.innerHTML = '';
-
         let calls = [];
         let stats = null;
-        if (data.result && data.result.calls) {
-            calls = data.result.calls;
-            stats = data.result.stats;
-        } else if (Array.isArray(data)) {
-            calls = data;
-        } else if (data.calls) {
-            calls = data.calls;
-        }
+        if (data.result && data.result.calls) { calls = data.result.calls; stats = data.result.stats; }
+        else if (Array.isArray(data)) { calls = data; }
+        else if (data.calls) { calls = data.calls; }
 
-        // Show stats bar
         const statsEl = document.getElementById('calls-stats');
         if (stats) {
             statsEl.style.display = 'flex';
             document.getElementById('stat-total-calls').textContent = stats.total_calls || 0;
             document.getElementById('stat-today-calls').textContent = stats.today_calls || 0;
             document.getElementById('stat-unique-clients').textContent = stats.unique_clients_today || 0;
-        } else {
-            statsEl.style.display = 'none';
-        }
+        } else { statsEl.style.display = 'none'; }
 
-        if (!calls.length) {
-            document.getElementById('calls-subtitle').textContent = 'No recent calls found for this rep.';
-            return;
-        }
+        if (!calls.length) { document.getElementById('calls-subtitle').textContent = 'No recent calls found for this rep.'; return; }
 
-        // Separate reviewable (5+ min with recording) from short calls
-        const reviewable = calls.filter(c =>
-            c.duration && c.duration > 300 &&
-            (c.has_transcript === 'true' || c.has_recording || c.recording_url)
-        );
+        const reviewable = calls.filter(c => c.duration && c.duration > 300 && (c.has_transcript === 'true' || c.has_recording || c.recording_url));
         const shortCalls = calls.filter(c => !c.duration || c.duration <= 300 || (!c.has_recording && !c.recording_url && c.has_transcript !== 'true'));
-
         const filterLabel = currentDateFilter === 'today' ? 'today' : currentDateFilter === 'week' ? 'this week' : '';
-        document.getElementById('calls-subtitle').textContent =
-            `${calls.length} total calls${filterLabel ? ' ' + filterLabel : ''} · ${reviewable.length} reviewable (5+ min with recording)`;
+        document.getElementById('calls-subtitle').textContent = `${calls.length} total calls${filterLabel ? ' ' + filterLabel : ''} · ${reviewable.length} reviewable (5+ min with recording)`;
 
         reviewable.slice(0, 30).forEach(call => {
             const direction = call.direction || 'unknown';
             const duration = call.duration ? Math.round(call.duration / 60) : 0;
-            const startedAt = call.created_at ? new Date(call.created_at).toLocaleString('en-AU', {
-                day: 'numeric', month: 'short', year: 'numeric',
-                hour: '2-digit', minute: '2-digit', hour12: true
-            }) : 'Unknown date';
+            const startedAt = call.created_at ? new Date(call.created_at).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) : 'Unknown date';
             const phone = call.phone_number || call.raw_digits || '';
             const contactName = call.contact_name || call.company_name || '';
-
             const li = document.createElement('li');
             li.className = 'call-item fade-in';
             li.innerHTML = `
-                <div class="call-icon ${direction}">
-                    ${direction === 'inbound' ? '&#8615;' : '&#8613;'}
-                </div>
+                <div class="call-icon ${direction}">${direction === 'inbound' ? '&#8615;' : '&#8613;'}</div>
                 <div class="call-info">
                     <div class="call-date">${escHtml(startedAt)}</div>
-                    <div class="call-meta">
-                        ${escHtml(direction)} · ${escHtml(contactName || phone || 'Unknown')}
-                        ${call.transcript_source === 'live' ? '<span style="color: var(--teal); font-weight: 600; margin-left: 6px;">LIVE</span>' : ''}
-                    </div>
+                    <div class="call-meta">${escHtml(direction)} · ${escHtml(contactName || phone || 'Unknown')}${call.transcript_source === 'live' ? '<span style="color: var(--teal); font-weight: 600; margin-left: 6px;">LIVE</span>' : ''}</div>
                 </div>
                 <div class="call-duration">${duration} min</div>
             `;
-            li.addEventListener('click', (e) => selectCall(e, {
-                id: call.id,
-                direction,
-                duration,
-                date: startedAt,
-                phone,
-                contact_name: contactName,
-                direct_link: call.direct_link || "",
-                recording_url: call.recording_url || "",
-                raw: call,
-            }));
+            li.addEventListener('click', (e) => selectCall(e, { id: call.id, direction, duration, date: startedAt, phone, contact_name: contactName, direct_link: call.direct_link || "", recording_url: call.recording_url || "", raw: call }));
             list.appendChild(li);
         });
 
-        // Show short calls dimmed
         if (shortCalls.length > 0 && reviewable.length < 30) {
             const divider = document.createElement('li');
             divider.style.cssText = 'padding: 8px 16px; font-size: 12px; color: var(--gray-500); font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;';
             divider.textContent = `${shortCalls.length} short / no-recording calls`;
             list.appendChild(divider);
-
-            shortCalls.slice(0, 10).forEach(call => {
-                const direction = call.direction || 'unknown';
-                const duration = call.duration ? Math.round(call.duration / 60) : 0;
-                const startedAt = call.created_at ? new Date(call.created_at).toLocaleString('en-AU', {
-                    day: 'numeric', month: 'short', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit', hour12: true
-                }) : 'Unknown date';
-                const phone = call.phone_number || call.raw_digits || '';
-                const contactName = call.contact_name || call.company_name || '';
-
-                const li = document.createElement('li');
-                li.className = 'call-item fade-in';
-                li.style.opacity = '0.5';
-                li.innerHTML = `
-                    <div class="call-icon ${direction}">
-                        ${direction === 'inbound' ? '&#8615;' : '&#8613;'}
-                    </div>
-                    <div class="call-info">
-                        <div class="call-date">${escHtml(startedAt)}</div>
-                        <div class="call-meta">
-                            ${escHtml(direction)} · ${escHtml(contactName || phone || 'Unknown')}
-                        </div>
-                    </div>
-                    <div class="call-duration">${duration} min</div>
-                `;
-                list.appendChild(li);
-            });
         }
     }
 
@@ -1110,9 +1908,6 @@
         e.currentTarget.classList.add('selected');
         generateReview(call);
     }
-
-    // ---- Generate Review (background job + polling) ----
-    let pollTimer = null;
 
     async function generateReview(call) {
         goToStep(3);
@@ -1124,47 +1919,25 @@
         const progressTrack = document.getElementById('progress-track');
         const progressFill = document.getElementById('progress-fill');
 
-        statusBar.classList.add('visible');
-        statusMsg.classList.remove('error');
-        statusSpinner.style.display = 'block';
-        reviewResult.classList.remove('visible');
-        progressTrack.classList.add('visible');
-        progressFill.style.width = '0%';
+        statusBar.classList.add('visible'); statusMsg.classList.remove('error');
+        statusSpinner.style.display = 'block'; reviewResult.classList.remove('visible');
+        progressTrack.classList.add('visible'); progressFill.style.width = '0%';
         statusText.textContent = 'Starting review...';
 
         const body = {
-            call_id: call.id,
-            rep_name: state.employee.name,
-            rep_email: state.employee.email,
-            rep_role: state.employee.role,
-            est_id: state.employee.est_id,
-            aircall_user_id: state.aircallUserId,
-            call_date: call.date,
-            call_direction: call.direction,
-            call_duration: call.duration,
-            client_name: call.contact_name || 'Unknown',
-            client_phone: call.phone,
-            recording_url: call.recording_url || '',
-            direct_link: call.direct_link || '',
+            call_id: call.id, rep_name: state.employee.name, rep_email: state.employee.email,
+            rep_role: state.employee.role, est_id: state.employee.est_id,
+            aircall_user_id: state.aircallUserId, call_date: call.date,
+            call_direction: call.direction, call_duration: call.duration,
+            client_name: call.contact_name || 'Unknown', client_phone: call.phone,
+            recording_url: call.recording_url || '', direct_link: call.direct_link || '',
         };
 
         try {
-            // Step 1: Start the background job
-            const startRes = await fetch('/api/start-review', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
+            const startRes = await fetch('/api/start-review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const startData = await startRes.json();
+            if (!startRes.ok || !startData.job_id) { statusMsg.classList.add('error'); statusSpinner.style.display = 'none'; statusText.textContent = 'Failed to start review.'; return; }
 
-            if (!startRes.ok || !startData.job_id) {
-                statusMsg.classList.add('error');
-                statusSpinner.style.display = 'none';
-                statusText.textContent = 'Failed to start review: ' + (startData.error || 'Unknown error');
-                return;
-            }
-
-            // Step 2: Poll for status every 2 seconds
             const jobId = startData.job_id;
             let elapsed = 0;
             const stepMessages = [
@@ -1176,92 +1949,40 @@
             ];
 
             if (pollTimer) clearInterval(pollTimer);
-
             pollTimer = setInterval(async () => {
                 elapsed += 2;
-
                 try {
                     const pollRes = await fetch(`/api/review-status/${jobId}`);
                     const job = await pollRes.json();
-
                     if (job.status === 'complete') {
-                        clearInterval(pollTimer);
-                        pollTimer = null;
-                        progressFill.style.width = '100%';
-                        statusText.textContent = 'Review complete!';
-
-                        setTimeout(() => {
-                            statusBar.classList.remove('visible');
-                            state.reviewData = job.result;
-                            renderReview(state.reviewData);
-                        }, 500);
+                        clearInterval(pollTimer); pollTimer = null;
+                        progressFill.style.width = '100%'; statusText.textContent = 'Review complete!';
+                        setTimeout(() => { statusBar.classList.remove('visible'); state.reviewData = job.result; renderReview(state.reviewData); }, 500);
                         return;
                     }
-
                     if (job.status === 'error') {
-                        clearInterval(pollTimer);
-                        pollTimer = null;
-                        statusMsg.classList.add('error');
-                        statusSpinner.style.display = 'none';
-                        progressTrack.classList.remove('visible');
-                        statusText.textContent = job.message || 'Review failed.';
+                        clearInterval(pollTimer); pollTimer = null;
+                        statusMsg.classList.add('error'); statusSpinner.style.display = 'none';
+                        progressTrack.classList.remove('visible'); statusText.textContent = job.message || 'Review failed.';
                         return;
                     }
-
-                    // Update status text from server message
-                    if (job.message) {
-                        statusText.textContent = job.message;
-                    }
-
-                } catch (pollErr) {
-                    // Network blip — show estimated step message as fallback
-                    console.warn('Poll failed, retrying...', pollErr);
-                }
-
-                // Always animate progress bar and fallback text based on elapsed time
+                    if (job.message) statusText.textContent = job.message;
+                } catch (pollErr) { console.warn('Poll failed', pollErr); }
                 for (let i = stepMessages.length - 1; i >= 0; i--) {
-                    if (elapsed >= stepMessages[i].at) {
-                        progressFill.style.width = Math.min(stepMessages[i].pct, 95) + '%';
-                        // Update text if still on the initial message
-                        if (statusText.textContent === 'Starting review...' ||
-                            statusText.textContent.startsWith('Fetching') ||
-                            statusText.textContent.startsWith('AI is') ||
-                            statusText.textContent.startsWith('Still') ||
-                            statusText.textContent.startsWith('Almost')) {
-                            statusText.textContent = stepMessages[i].msg;
-                        }
-                        break;
-                    }
+                    if (elapsed >= stepMessages[i].at) { progressFill.style.width = Math.min(stepMessages[i].pct, 95) + '%'; break; }
                 }
-
-                // Safety: timeout after 5 minutes
-                if (elapsed > 300) {
-                    clearInterval(pollTimer);
-                    pollTimer = null;
-                    statusMsg.classList.add('error');
-                    statusSpinner.style.display = 'none';
-                    statusText.textContent = 'Review timed out. Please try again.';
-                }
-
+                if (elapsed > 300) { clearInterval(pollTimer); pollTimer = null; statusMsg.classList.add('error'); statusSpinner.style.display = 'none'; statusText.textContent = 'Review timed out.'; }
             }, 2000);
-
-        } catch (err) {
-            statusMsg.classList.add('error');
-            statusSpinner.style.display = 'none';
-            statusText.textContent = 'Request failed: ' + err.message;
-        }
+        } catch (err) { statusMsg.classList.add('error'); statusSpinner.style.display = 'none'; statusText.textContent = 'Request failed: ' + err.message; }
     }
 
     function renderReview(data) {
         const result = document.getElementById('review-result');
         result.classList.add('visible');
 
-        // Grade
         document.getElementById('grade-value').textContent = data.grade || '--';
-        document.getElementById('grade-detail').textContent =
-            `${data.total_points || 0}/100 points · ${data.percentage || 0}%`;
+        document.getElementById('grade-detail').textContent = `${data.total_points || 0}/100 points · ${data.percentage || 0}%`;
 
-        // Scores grid — 4-stage model
         const grid = document.getElementById('scores-grid');
         grid.innerHTML = '';
         const stages = [
@@ -1284,7 +2005,6 @@
             grid.appendChild(div);
         }
 
-        // Stage flow
         const hlList = document.getElementById('highlights-list');
         hlList.innerHTML = '';
         if (data.stage_flow) {
@@ -1293,7 +2013,6 @@
             li.style.cssText = 'margin-bottom: 6px; font-size: 14px; color: var(--gray-700); line-height: 1.5; list-style: none;';
             hlList.appendChild(li);
         }
-        // Discovery triggers
         const triggers = data.scores?.discovery?.triggers_identified;
         if (triggers && triggers.length) {
             const li = document.createElement('li');
@@ -1302,14 +2021,10 @@
             hlList.appendChild(li);
         }
 
-        // Top strength / dev / focus
         document.getElementById('top-strength').textContent = data.top_strength || '';
         document.getElementById('top-dev').textContent = data.focus_on || data.top_development_area || '';
 
-        // Download link
-        if (data.filename) {
-            document.getElementById('download-link').href = `/api/output/${data.filename}`;
-        }
+        if (data.filename) { document.getElementById('download-link').href = `/api/output/${data.filename}`; }
     }
 
     // ---- Email ----
@@ -1318,78 +2033,32 @@
         const d = state.reviewData;
         const firstName = d.rep_name?.split(' ')[0] || '';
         const clientDisplay = d.client_name || 'a client';
-
         document.getElementById('email-to').textContent = d.rep_email || 'No email found';
         document.getElementById('email-subject').textContent = `Call Quality Review — ${clientDisplay} — ${d.call_date || ''}`;
         document.getElementById('email-attachment').textContent = d.filename || '(no document available)';
-        document.getElementById('email-body').textContent =
-`Hi ${firstName},
-
-Please find attached your call quality review for your call with ${clientDisplay} on ${d.call_date || ''}:
-${d.call_link || ''}
-
-Have a read through and let me know if you'd like to chat about anything in the review.
-
-Kind regards,
-Anesu`;
-
+        document.getElementById('email-body').textContent = `Hi ${firstName},\n\nPlease find attached your call quality review for your call with ${clientDisplay} on ${d.call_date || ''}:\n${d.call_link || ''}\n\nHave a read through and let me know if you'd like to chat about anything in the review.\n\nKind regards,\nAnesu`;
         document.getElementById('email-preview-content').classList.add('visible');
         document.getElementById('sent-confirmation').classList.remove('visible');
     }
 
     async function sendEmail() {
         const btn = document.getElementById('send-btn');
-        btn.disabled = true;
-        btn.textContent = 'Sending...';
-
+        btn.disabled = true; btn.textContent = 'Sending...';
         try {
             const d = state.reviewData;
-            const res = await fetch('/api/send-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rep_email: d.rep_email,
-                    rep_name: d.rep_name,
-                    client_name: d.client_name,
-                    call_date: d.call_date,
-                    call_link: d.call_link,
-                    filename: d.filename,
-                    filepath: d.filepath,
-                }),
-            });
+            const res = await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rep_email: d.rep_email, rep_name: d.rep_name, client_name: d.client_name, call_date: d.call_date, call_link: d.call_link, filename: d.filename, filepath: d.filepath }) });
             const result = await res.json();
-
-            if (!res.ok || result.error) {
-                alert('Send failed: ' + (result.error || `Server returned ${res.status}`));
-                btn.disabled = false;
-                btn.textContent = 'Confirm & Send';
-                return;
-            }
-
-            // Show confirmation
+            if (!res.ok || result.error) { alert('Send failed: ' + (result.error || `Server returned ${res.status}`)); return; }
             document.getElementById('email-preview-content').classList.remove('visible');
             document.getElementById('sent-confirmation').classList.add('visible');
-            const docNote = result.attachment_included
-                ? 'with document attached'
-                : '(document could not be attached)';
-            document.getElementById('sent-detail').textContent =
-                `Review sent to ${d.rep_email} ${docNote}.`;
-        } catch(err) {
-            alert('Send failed: ' + err.message);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Confirm & Send';
-        }
+            const docNote = result.attachment_included ? 'with document attached' : '(document could not be attached)';
+            document.getElementById('sent-detail').textContent = `Review sent to ${d.rep_email} ${docNote}.`;
+        } catch(err) { alert('Send failed: ' + err.message); }
+        finally { btn.disabled = false; btn.textContent = 'Confirm & Send'; }
     }
 
-    // ---- Util ----
-    function escHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str || '';
-        return div.innerHTML;
-    }
+    function escHtml(str) { const div = document.createElement('div'); div.textContent = str || ''; return div.innerHTML; }
 
-    // Auto-focus search on load
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('search-input').focus();
     });
