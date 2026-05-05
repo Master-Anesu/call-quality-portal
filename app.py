@@ -434,25 +434,39 @@ def transcribe_recording(recording_url: str, call_id: str = '') -> str:
 # ---------------------------------------------------------------------------
 
 def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 4000) -> str:
-    """Call Azure OpenAI GPT-4.1 (non-streaming). Returns the full response text."""
+    """Call Azure OpenAI GPT-4.1 (non-streaming). Returns the full response text.
+    Retries once with higher token limit if response was truncated."""
     from openai import AzureOpenAI
     client = AzureOpenAI(
         api_key=AZURE_OPENAI_API_KEY,
         api_version=AZURE_OPENAI_API_VERSION,
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
     )
-    response = client.chat.completions.create(
-        model=AZURE_OPENAI_DEPLOYMENT,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=max_tokens,
-        temperature=0.3,
-        stream=False,
-        response_format={"type": "json_object"},
-    )
-    return response.choices[0].message.content or ""
+
+    def _call(tokens):
+        return client.chat.completions.create(
+            model=AZURE_OPENAI_DEPLOYMENT,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_tokens=tokens,
+            temperature=0.3,
+            stream=False,
+            response_format={"type": "json_object"},
+        )
+
+    response = _call(max_tokens)
+    choice = response.choices[0]
+    logger.info("LLM finish_reason: %s, max_tokens: %d", choice.finish_reason, max_tokens)
+
+    if choice.finish_reason == 'length' and max_tokens < 16000:
+        logger.warning("LLM response truncated (finish_reason=length), retrying with %d tokens", max_tokens * 2)
+        response = _call(max_tokens * 2)
+        choice = response.choices[0]
+        logger.info("LLM retry finish_reason: %s", choice.finish_reason)
+
+    return choice.message.content or ""
 
 
 # ---------------------------------------------------------------------------
@@ -1365,10 +1379,10 @@ IMPORTANT: In the transcript below, [agent] is ALWAYS {rep_name} (the rep being 
 TRANSCRIPT:
 {transcript_text[:12000]}
 
-Score each dimension 1-10 based on the rubric. Be specific and reference real moments from the transcript. Return valid JSON only."""
+Score each sub-criteria using the max points defined in the rubric (not 1-10). Be specific and reference real moments from the transcript. Return valid JSON only."""
 
         try:
-            llm_response = call_llm(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=6000)
+            llm_response = call_llm(SCORING_SYSTEM_PROMPT, scoring_prompt, max_tokens=10000)
             logger.info("LLM response length: %d chars, first 200: %s", len(llm_response), llm_response[:200])
             review_json = parse_json_from_response(llm_response)
         except Exception as e:
