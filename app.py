@@ -169,33 +169,70 @@ def normalize_phone(phone: str) -> str:
     return digits[-9:] if len(digits) >= 9 else digits
 
 
-def get_active_allocated_phones() -> set:
-    """Get set of normalized phone numbers for leads with Journey_Stage 'B-Active HCP' or 'B-Allocated HCP'."""
+def get_eligible_phones() -> set:
+    """Get set of normalized phone numbers eligible for call review.
+    Eligible callers are:
+    - Leads with Journey_Stage 'B-Active HCP' or 'B-Allocated HCP'
+    - Contacts (converted leads / consumers)
+    - Deals (sales created)
+    """
+    phones = set()
+
+    # Active/Allocated leads
     rows = query_databricks("""
         SELECT Phone, Mobile, Contact_Phone
         FROM trilogycare_dev.zoho_crm.leads
         WHERE Journey_Stage IN ('B-Active HCP', 'B-Allocated HCP')
     """)
-    phones = set()
     for row in rows:
         for val in row:
             if val:
-                normalized = normalize_phone(str(val))
-                if normalized:
-                    phones.add(normalized)
+                n = normalize_phone(str(val))
+                if n:
+                    phones.add(n)
+
+    # Contacts (converted leads / consumers)
+    rows = query_databricks("""
+        SELECT Phone, Mobile
+        FROM trilogycare_dev.zoho_crm.contacts
+        WHERE Phone IS NOT NULL OR Mobile IS NOT NULL
+    """)
+    for row in rows:
+        for val in row:
+            if val:
+                n = normalize_phone(str(val))
+                if n:
+                    phones.add(n)
+
+    # Deals (sales)
+    rows = query_databricks("""
+        SELECT Client_Phone, Mobile
+        FROM trilogycare_dev.zoho_crm.deals
+        WHERE Client_Phone IS NOT NULL OR Mobile IS NOT NULL
+    """)
+    for row in rows:
+        for val in row:
+            if val:
+                n = normalize_phone(str(val))
+                if n:
+                    phones.add(n)
+
     return phones
 
 
-def check_lead_journey_stage(phone: str) -> dict:
-    """Check if a phone number belongs to a lead with Active or Allocated journey stage.
-    Returns dict with 'is_valid' bool, 'journey_stage', and 'lead_name'."""
+def check_call_eligible(phone: str) -> dict:
+    """Check if a phone number belongs to an eligible caller for review.
+    Eligible: Active/Allocated lead, contact (consumer), or deal (sale).
+    Returns dict with 'is_valid' bool, 'source', and 'lead_name'."""
     if not phone:
-        return {'is_valid': False, 'journey_stage': None, 'lead_name': None}
+        return {'is_valid': False, 'source': None, 'lead_name': None}
     normalized = normalize_phone(phone)
     if not normalized:
-        return {'is_valid': False, 'journey_stage': None, 'lead_name': None}
+        return {'is_valid': False, 'source': None, 'lead_name': None}
+
+    # Check leads (Active/Allocated)
     rows = query_databricks(f"""
-        SELECT First_Name, Last_Name, Journey_Stage, Phone, Mobile
+        SELECT First_Name, Last_Name, Journey_Stage
         FROM trilogycare_dev.zoho_crm.leads
         WHERE Journey_Stage IN ('B-Active HCP', 'B-Allocated HCP')
         AND (
@@ -206,15 +243,50 @@ def check_lead_journey_stage(phone: str) -> dict:
         LIMIT 1
     """)
     if rows:
-        first = rows[0][0] or ''
-        last = rows[0][1] or ''
-        stage = rows[0][2] or ''
         return {
             'is_valid': True,
-            'journey_stage': stage,
-            'lead_name': f"{first} {last}".strip(),
+            'source': 'lead',
+            'journey_stage': rows[0][2] or '',
+            'lead_name': f"{rows[0][0] or ''} {rows[0][1] or ''}".strip(),
         }
-    return {'is_valid': False, 'journey_stage': None, 'lead_name': None}
+
+    # Check contacts (converted leads / consumers)
+    rows = query_databricks(f"""
+        SELECT First_Name, Last_Name
+        FROM trilogycare_dev.zoho_crm.contacts
+        WHERE (
+            RIGHT(REGEXP_REPLACE(Phone, '[^0-9]', ''), 9) = '{normalized}'
+            OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
+        )
+        LIMIT 1
+    """)
+    if rows:
+        return {
+            'is_valid': True,
+            'source': 'contact',
+            'journey_stage': 'Consumer',
+            'lead_name': f"{rows[0][0] or ''} {rows[0][1] or ''}".strip(),
+        }
+
+    # Check deals (sales)
+    rows = query_databricks(f"""
+        SELECT Contact_Name.name, Stage
+        FROM trilogycare_dev.zoho_crm.deals
+        WHERE (
+            RIGHT(REGEXP_REPLACE(Client_Phone, '[^0-9]', ''), 9) = '{normalized}'
+            OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
+        )
+        LIMIT 1
+    """)
+    if rows:
+        return {
+            'is_valid': True,
+            'source': 'deal',
+            'journey_stage': f"Deal - {rows[0][1] or ''}",
+            'lead_name': rows[0][0] or '',
+        }
+
+    return {'is_valid': False, 'source': None, 'lead_name': None}
 
 
 def get_transcript_from_databricks(call_id: str) -> str:
@@ -793,10 +865,10 @@ def get_calls():
 
     all_calls = _parse_aircall_calls(result)
 
-    # Get active/allocated lead phone numbers for Zoho filtering
-    active_phones = get_active_allocated_phones()
+    # Get eligible phone numbers (active/allocated leads + contacts + deals)
+    eligible_phones = get_eligible_phones()
 
-    # Only include calls over 5 minutes (300 seconds) AND where caller is an active/allocated lead
+    # Only include calls over 5 minutes (300 seconds) AND where caller is in Zoho
     calls = []
     for c in all_calls:
         dur = c.get('duration') or 0
@@ -807,10 +879,10 @@ def get_calls():
                 dur = 0
         if dur < 300:
             continue
-        # Check if caller phone matches an active/allocated Zoho lead
+        # Check if caller phone matches an eligible Zoho record
         caller_phone = c.get('raw_digits') or c.get('phone_number') or c.get('number', {}).get('digits', '') or ''
         caller_normalized = normalize_phone(caller_phone)
-        if caller_normalized and active_phones and caller_normalized not in active_phones:
+        if caller_normalized and eligible_phones and caller_normalized not in eligible_phones:
             continue
         c['zoho_verified'] = True
         # Normalize recording fields so frontend can detect them
@@ -1060,19 +1132,19 @@ def run_review_pipeline(job_id: str, data: dict):
         direct_link = data.get('direct_link', '')
         recording_url = data.get('recording_url', '')
 
-        # Step 0: Verify caller is an active/allocated Zoho lead
+        # Step 0: Verify caller is in Zoho (active/allocated lead, contact, or deal)
         if client_phone:
-            lead_check = check_lead_journey_stage(client_phone)
-            if not lead_check['is_valid']:
+            eligibility = check_call_eligible(client_phone)
+            if not eligibility['is_valid']:
                 jobs[job_id] = {
                     'status': 'error',
-                    'message': 'This call is not eligible for review — the caller is not in Zoho with an Active or Allocated journey stage.',
+                    'message': 'This call is not eligible for review — the caller is not in Zoho as an Active/Allocated lead, contact, or deal.',
                     'result': None,
-                    'error': 'Lead not active/allocated',
+                    'error': 'Caller not in Zoho',
                 }
                 return
-            if lead_check['lead_name'] and client_name == 'Unknown':
-                client_name = lead_check['lead_name']
+            if eligibility['lead_name'] and client_name == 'Unknown':
+                client_name = eligibility['lead_name']
 
         # Step 1: Get transcript (pre-provided or fetched from Aircall)
         transcript_text = data.get('transcript_text', '')
