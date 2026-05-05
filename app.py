@@ -1252,21 +1252,24 @@ def run_review_pipeline(job_id: str, data: dict):
         direct_link = data.get('direct_link', '')
         recording_url = data.get('recording_url', '')
 
-        # Step 0: Verify caller is eligible if phone is available
-        # (Aircall list API doesn't expose caller phone, but it may be passed from details)
-        if client_phone:
-            call_date_str = call_date[:10] if call_date else ''
-            eligibility = check_call_eligible(client_phone, call_date_str)
-            if not eligibility['is_valid']:
-                jobs[job_id] = {
-                    'status': 'error',
-                    'message': 'This call is not eligible for review — the caller is not an Active/Allocated lead, and no deal was created on the day of this call.',
-                    'result': None,
-                    'error': 'Call not eligible',
-                }
-                return
-            if eligibility['lead_name'] and client_name == 'Unknown':
-                client_name = eligibility['lead_name']
+        # Zoho eligibility is already verified at the call-list stage (Databricks filtering).
+        # If a client phone is available, try to resolve the client name from Zoho.
+        if client_phone and client_name == 'Unknown':
+            normalized = normalize_phone(client_phone)
+            if normalized:
+                rows = query_databricks(f"""
+                    SELECT First_Name, Last_Name
+                    FROM trilogycare_dev.zoho_crm.leads
+                    WHERE Journey_Stage IN ('B-Active HCP', 'B-Allocated HCP')
+                    AND (
+                        RIGHT(REGEXP_REPLACE(Phone, '[^0-9]', ''), 9) = '{normalized}'
+                        OR RIGHT(REGEXP_REPLACE(Mobile, '[^0-9]', ''), 9) = '{normalized}'
+                        OR RIGHT(REGEXP_REPLACE(Contact_Phone, '[^0-9]', ''), 9) = '{normalized}'
+                    )
+                    LIMIT 1
+                """)
+                if rows:
+                    client_name = f"{rows[0][0] or ''} {rows[0][1] or ''}".strip() or client_name
 
         # Step 1: Get transcript (pre-provided or fetched from Aircall)
         transcript_text = data.get('transcript_text', '')
