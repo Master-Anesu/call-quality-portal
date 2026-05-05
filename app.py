@@ -483,10 +483,12 @@ Scoring benchmark: top-performer Aprocina Anthony's conversational style — the
 Core question for every stage: "Did this part of the conversation move the caller closer to a confident yes?"
 
 The call is scored across 4 stages with these weightings:
-- Introduction (15 points / 15%): Sets the tone
-- Discovery (35 points / 35%): The foundation — everything else depends on this
-- Pitch (35 points / 35%): Where value is communicated and trust is built
-- Close (15 points / 15%): Seals what was already earned
+- Introduction (15 points / 15%): Sets the tone — warm greeting (/5), clear introduction (/5), purpose statement (/5)
+- Discovery (35 points / 35%): The foundation — current care situation (/8), biggest challenge (/8), impact on daily life (/7), ideal care vision (/6), timeline & urgency (/6)
+- Pitch (35 points / 35%): Where value is communicated — trigger recap (/8), solution alignment (/10), relevant services (/9), comprehension check (/8)
+- Close (15 points / 15%): Seals what was earned — closing question (/4), pause & listen (/3), objection handling (/4), next steps confirmed (/4)
+
+Impact chain: A weak introduction means the caller enters discovery guarded. Incomplete discovery means the pitch becomes generic. A generic pitch makes closing feel pushy. Score each stage considering this flow.
 
 Return your response as valid JSON with this exact structure:
 {
@@ -495,56 +497,53 @@ Return your response as valid JSON with this exact structure:
     "introduction": {
       "total": 0,
       "sub_scores": {
-        "warm_greeting": {"score": 0, "max": 5, "comment": "specific feedback"},
-        "clear_introduction": {"score": 0, "max": 5, "comment": "specific feedback"},
-        "purpose_statement": {"score": 0, "max": 5, "comment": "specific feedback"}
+        "warm_greeting": {"score": 0, "max": 5, "comment": "one sentence"},
+        "clear_introduction": {"score": 0, "max": 5, "comment": "one sentence"},
+        "purpose_statement": {"score": 0, "max": 5, "comment": "one sentence"}
       },
-      "feedback": "2-3 sentence paragraph speaking directly to the rep (use 'you') — what you did well or missed, specific moments, how it affected discovery"
+      "feedback": "2-3 sentences speaking directly to the rep — what you did well or missed, how it affected discovery"
     },
     "discovery": {
       "total": 0,
       "sub_scores": {
-        "current_care_situation": {"score": 0, "max": 8, "comment": "specific feedback"},
-        "biggest_challenge": {"score": 0, "max": 8, "comment": "specific feedback"},
-        "impact_on_daily_life": {"score": 0, "max": 7, "comment": "specific feedback"},
-        "ideal_care_vision": {"score": 0, "max": 6, "comment": "specific feedback"},
-        "timeline_urgency": {"score": 0, "max": 6, "comment": "specific feedback"}
+        "current_care_situation": {"score": 0, "max": 8, "comment": "one sentence"},
+        "biggest_challenge": {"score": 0, "max": 8, "comment": "one sentence"},
+        "impact_on_daily_life": {"score": 0, "max": 7, "comment": "one sentence"},
+        "ideal_care_vision": {"score": 0, "max": 6, "comment": "one sentence"},
+        "timeline_urgency": {"score": 0, "max": 6, "comment": "one sentence"}
       },
-      "triggers_identified": ["list of triggers the rep uncovered, or note what was missed"],
-      "feedback": "3-4 sentence paragraph speaking directly to the rep (use 'you') — did you uncover 3 clear triggers? How did this affect the pitch?"
+      "triggers_identified": ["trigger 1", "trigger 2", "trigger 3"],
+      "feedback": "3-4 sentences — did you uncover 3 clear triggers? How did this affect the pitch?"
     },
     "pitch": {
       "total": 0,
       "sub_scores": {
-        "trigger_recap": {"score": 0, "max": 8, "comment": "specific feedback"},
-        "solution_alignment": {"score": 0, "max": 10, "comment": "specific feedback"},
-        "relevant_services": {"score": 0, "max": 9, "comment": "specific feedback"},
-        "comprehension_check": {"score": 0, "max": 8, "comment": "specific feedback"}
+        "trigger_recap": {"score": 0, "max": 8, "comment": "one sentence"},
+        "solution_alignment": {"score": 0, "max": 10, "comment": "one sentence"},
+        "relevant_services": {"score": 0, "max": 9, "comment": "one sentence"},
+        "comprehension_check": {"score": 0, "max": 8, "comment": "one sentence"}
       },
-      "feedback": "3-4 sentence paragraph speaking directly to the rep (use 'you') — was your pitch built on triggers or generic? Tie back to discovery."
+      "feedback": "3-4 sentences — was your pitch built on triggers or generic? Tie back to discovery."
     },
     "close": {
       "total": 0,
       "sub_scores": {
-        "closing_question": {"score": 0, "max": 4, "comment": "specific feedback"},
-        "pause_and_listen": {"score": 0, "max": 3, "comment": "specific feedback"},
-        "objection_handling": {"score": 0, "max": 4, "comment": "specific feedback"},
-        "next_steps_confirmed": {"score": 0, "max": 4, "comment": "specific feedback"}
+        "closing_question": {"score": 0, "max": 4, "comment": "one sentence"},
+        "pause_and_listen": {"score": 0, "max": 3, "comment": "one sentence"},
+        "objection_handling": {"score": 0, "max": 4, "comment": "one sentence"},
+        "next_steps_confirmed": {"score": 0, "max": 4, "comment": "one sentence"}
       },
       "closing_technique": "process / pricing / alternate / assumptive",
-      "feedback": "2-3 sentence paragraph speaking directly to the rep (use 'you') — was your close confident or hesitant? Trace back to earlier stages if needed."
+      "feedback": "2-3 sentences — was your close confident or hesitant? Trace back to earlier stages."
     }
   },
-  "stage_flow": "3-4 sentence paragraph speaking directly to the rep (use 'you') — connecting the dots across all four stages, where your momentum built or broke down",
-  "focus_on": "one sentence speaking directly to the rep — the single most important thing for you to work on next",
-  "top_strength": "one sentence speaking directly to the rep — the one thing you should keep doing",
-  "top_development_area": "one sentence speaking directly to the rep — the one thing that would make the biggest difference for you"
+  "stage_flow": "3-4 sentences connecting the dots across all four stages — where momentum built or broke down",
+  "focus_on": "one sentence — the single most important thing to work on next",
+  "top_strength": "one sentence — the one thing to keep doing",
+  "top_development_area": "one sentence — the one thing that would make the biggest difference"
 }
 
-Total max: 100 points (Introduction /15 + Discovery /35 + Pitch /35 + Close /15)
-
-Grade scale:
-A+ = 90-100%, A = 80-89%, B = 70-79%, C = 60-69%, D = below 60%
+IMPORTANT: Keep comments to ONE sentence each. Keep feedback paragraphs SHORT. Total max: 100 points. Grade: A+ 90-100, A 80-89, B 70-79, C 60-69, D below 60.
 """
 
 
